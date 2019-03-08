@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Discord.Net" Version="2.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="YahurrFramework">
+      <HintPath>..\..\henrik9864\Yahurrbot-v3\YahurrFramework\bin\Debug\netcoreapp2.1\YahurrFramework.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <ApplicationIcon />
+    <StartupObject />
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Discord.Net" Version="2.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="YahurrFramework">
+      <HintPath>..\..\henrik9864\Yahurrbot-v3\YahurrFramework\bin\Debug\netcoreapp2.1\YahurrFramework.dll</HintPath>
+    </Reference>
+    <Reference Include="YahurrLexer">
+      <HintPath>..\..\BovrilLexer\BovrilLexer\bin\Release\netcoreapp2.1\YahurrLexer.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
