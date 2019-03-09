@@ -1,17 +1,9 @@
 ﻿using Discord.WebSocket;
 using NModule;
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Threading.Tasks;
 using YahurrFramework;
 using YahurrFramework.Attributes;
-using YahurrFramework.Enums;
-using YahurrLexer;
 
 // Mining Ledger Bot
 namespace BovrilModule

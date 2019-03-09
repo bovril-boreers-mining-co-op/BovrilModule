@@ -48,6 +48,7 @@ namespace BovrilModule
 			}
 			catch (Exception)
 			{
+
 			}
 
 			int retries = 0;
@@ -122,7 +123,17 @@ namespace BovrilModule
 		[Command("moon")]
 		public async Task GetMoonStats(params string[] input)
 		{
-			SystemMoon systemMoon = moonParser.Parse(input);
+			SystemMoon systemMoon;
+			try
+			{
+				systemMoon = moonParser.Parse(input);
+			}
+			catch (Exception e)
+			{
+				await RespondAsync($"```{e.Message}```");
+				return;
+			}
+
 			if (TryGetMoon(systemMoon, out MoonInformation moon))
 			{
 				string moonStats = GenerateMoonStats(moon);
@@ -308,6 +319,9 @@ namespace BovrilModule
 
 		bool TryRunQuery(string query, out List<object> rows)
 		{
+			if (dbConnection.State != ConnectionState.Open)
+				dbConnection.Open();
+
 			rows = new List<object>();
 			var cmd = new MySqlCommand(query, dbConnection);
 			var reader = cmd.ExecuteReader();
