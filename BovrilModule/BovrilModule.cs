@@ -32,7 +32,7 @@ namespace BovrilModule
 			//Remove filtered words
 			foreach (var item in Config.FileterdWords)
 			{
-				Match match = Regex.Match(message.Content, item.regEx);
+				Match match = Regex.Match(message.Content.ToLower(), item.regEx);
 
 				if (match.Success)
 				{
@@ -44,9 +44,9 @@ namespace BovrilModule
 			}
 
 			//Alice o/ rage boner.
-			Match aliceMatch = Regex.Match(message.Content, "^o\\/|\\\\o|o7$");
-			if (aliceMatch.Success && message?.Channel.Id != 264791114727424000)
-				await RespondAsync("hand slap ya pubbie, keep that shit in high sec!", false);
+			//Match aliceMatch = Regex.Match(message.Content, "(?:o|\\\\|7).*(?:\\/|7|o)");
+			//if (aliceMatch.Success && message?.Channel.Id != 264791114727424000)
+			//	await RespondAsync($"{message.Author.Mention} hand slap ya pubbie, keep that shit in high sec!", false);
 		}
 	}
 }

@@ -1,4 +1,5 @@
 ﻿using Discord;
+using Discord.WebSocket;
 using Newtonsoft.Json;
 using System;
 using System.IO;
@@ -8,8 +9,19 @@ using YahurrFramework.Attributes;
 
 namespace KeepStarModule
 {
-	public class Class1 : YModule
+	[Config(typeof(KeepStarConfig))]
+	public class KSProgress : YModule
 	{
+		public new KeepStarConfig Config
+		{
+			get
+			{
+				return (KeepStarConfig)base.Config;
+			}
+		}
+
+		IUserMessage KSMessage;
+
 		protected async override Task Init()
 		{
 			if (!File.Exists("Files/KeepStar.json"))
@@ -19,15 +31,43 @@ namespace KeepStarModule
 					await writer.WriteAsync(json);
 			}
 
-
+			ITextChannel channel = await Guild.GetTextChannelAsync(Config.UpdateChannel);
+			if (channel != null && await ExistsAsync("UpdateMessage"))
+			{
+				ulong msgID = await LoadAsync<ulong>("UpdateMessage");
+				KSMessage = await channel.GetMessageAsync(msgID) as IUserMessage;
+			}
+			else if (channel != null)
+			{
+				KSMessage = await SendToChannel(channel) as IUserMessage;
+				await SaveAsync("UpdateMessage", KSMessage.Id);
+			}
 		}
+
 		[Command("ks")]
 		public async Task ShowProgress()
+		{
+			await SendToChannel(Channel);
+		}
+
+		[Command("update", "ks")]
+		public async Task UpdateKSMessage()
 		{
 			string json = File.ReadAllText("Files/KeepStar.json");
 			KeepStarProgress progress = JsonConvert.DeserializeObject<KeepStarProgress>(json);
 
-			await Channel.SendMessageAsync(embed: CreateKeepStarEmebed(progress));
+			await KSMessage.ModifyAsync(a =>
+			{
+				a.Embed = CreateKeepStarEmebed(progress);
+			});
+		}
+
+		async Task<IMessage> SendToChannel(IMessageChannel channel)
+		{
+			string json = File.ReadAllText("Files/KeepStar.json");
+			KeepStarProgress progress = JsonConvert.DeserializeObject<KeepStarProgress>(json);
+
+			return await channel.SendMessageAsync(embed: CreateKeepStarEmebed(progress));
 		}
 
 		Embed CreateKeepStarEmebed(KeepStarProgress progress)
