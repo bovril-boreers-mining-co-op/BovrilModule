@@ -1,5 +1,9 @@
-﻿using Discord.WebSocket;
+﻿using Discord;
+using Discord.WebSocket;
 using NModule;
+using System.Linq;
+using System.Collections.Generic;
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using YahurrFramework;
@@ -47,6 +51,32 @@ namespace BovrilModule
 			//Match aliceMatch = Regex.Match(message.Content, "(?:o|\\\\|7).*(?:\\/|7|o)");
 			//if (aliceMatch.Success && message?.Channel.Id != 264791114727424000)
 			//	await RespondAsync($"{message.Author.Mention} hand slap ya pubbie, keep that shit in high sec!", false);
+		}
+
+		[Command("export", "users")]
+		public async Task ExportUsers()
+		{
+			if (Guild == null)
+				return;
+
+			IReadOnlyCollection<IUser> users = await Guild.GetUsersAsync();
+			string file = "Name\n";
+			foreach (IUser user in users)
+			{
+				SocketGuildUser guildUser = user as SocketGuildUser;
+
+				if (guildUser == null)
+					continue;
+
+				file += $"{(string.IsNullOrEmpty(guildUser.Nickname) ? guildUser.Username : guildUser.Nickname)}\n";
+			}
+
+			using (StreamWriter writer = File.CreateText("Files/Users.tsv"))
+			{
+				await writer.WriteAsync(file);
+			}
+
+			await Channel.SendFileAsync("Files/Users.tsv");
 		}
 	}
 }

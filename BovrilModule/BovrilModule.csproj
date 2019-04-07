@@ -9,19 +9,12 @@
     <PackageReference Include="CsvHelper" Version="12.1.0" />
     <PackageReference Include="Discord.Net" Version="2.0.1" />
     <PackageReference Include="MySql.Data" Version="8.0.15" />
+    <PackageReference Include="YahurrFramework" Version="1.3.5" />
+    <PackageReference Include="YahurrLexer" Version="0.1.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\NotificationModule\NotificationModule.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="YahurrFramework">
-      <HintPath>..\..\henrik9864\Yahurrbot-v3\YahurrFramework\bin\Debug\netcoreapp2.1\YahurrFramework.dll</HintPath>
-    </Reference>
-    <Reference Include="YahurrLexer">
-      <HintPath>..\..\BovrilLexer\BovrilLexer\bin\Release\netcoreapp2.1\YahurrLexer.dll</HintPath>
-    </Reference>
   </ItemGroup>
 
   <ItemGroup>
