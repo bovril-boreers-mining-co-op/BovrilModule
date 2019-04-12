@@ -320,7 +320,7 @@ namespace BovrilModule
 		bool TryRunQuery(string query, out List<object> rows)
 		{
 			if (dbConnection.State != ConnectionState.Open)
-				dbConnection.Open();
+				dbConnection.OpenAsync().GetAwaiter().GetResult();
 
 			rows = new List<object>();
 			var cmd = new MySqlCommand(query, dbConnection);
