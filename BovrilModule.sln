@@ -7,7 +7,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BovrilModule", "BovrilModul
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NotificationModule", "NotificationModule\NotificationModule.csproj", "{8099B8DF-CDFF-4CC2-A27D-035E122BED36}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeepStarModule", "KeepStarModule\KeepStarModule.csproj", "{4AC4E69C-C019-459B-9FAC-1DA958F29702}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KeepStarModule", "KeepStarModule\KeepStarModule.csproj", "{4AC4E69C-C019-459B-9FAC-1DA958F29702}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RoleModule", "RoleModule\RoleModule.csproj", "{119CD01F-CA91-462C-8A24-26D9109F9BA4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -27,6 +29,10 @@ Global
 		{4AC4E69C-C019-459B-9FAC-1DA958F29702}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4AC4E69C-C019-459B-9FAC-1DA958F29702}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4AC4E69C-C019-459B-9FAC-1DA958F29702}.Release|Any CPU.Build.0 = Release|Any CPU
+		{119CD01F-CA91-462C-8A24-26D9109F9BA4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{119CD01F-CA91-462C-8A24-26D9109F9BA4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{119CD01F-CA91-462C-8A24-26D9109F9BA4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{119CD01F-CA91-462C-8A24-26D9109F9BA4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -83,7 +83,14 @@ namespace BovrilModule
 				}
 			}
 
-			await notificationModule.AddNotification(DateTime.Now + timeSpan - new TimeSpan(0, 10, 0), formattedMessage, inputs.ToList());
+			DateTime spawnTime = DateTime.Now + timeSpan - new TimeSpan(0, 10, 0);
+			var notification = notificationModule.GetNotification(spawnTime, new TimeSpan(0, 1, 0));
+
+			if (notification is null || notification.Message != formattedMessage)
+				await notificationModule.AddNotification(DateTime.Now + timeSpan - new TimeSpan(0, 10, 0), formattedMessage, inputs.ToList());
+			else
+				await RespondAsync($"That anomaly has already been registerd.");
+				//await RespondAsync($"Im sorry but {notification.Author} was first.");
 		}
 	}
 }

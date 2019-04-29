@@ -14,6 +14,7 @@ using YahurrFramework;
 using YahurrFramework.Attributes;
 using YahurrFramework.Enums;
 using System.Data;
+using System.Data.Common;
 
 namespace BovrilModule
 {
@@ -144,7 +145,7 @@ namespace BovrilModule
 										$"{moonStats}" +
 										$"```");
 				else
-					await RespondAsync($"```Moon has not been scanned.```");
+					await RespondAsync($"```Moon has not been scanned. If this is a public moon please contact Prople Dudlestreis.```");
 			}
 			else
 				await RespondAsync("```Moon not found or it has not been scanned. If this is a public moon please contact Prople Dudlestreis.```");
@@ -189,20 +190,27 @@ namespace BovrilModule
 		/// <returns></returns>
 		public bool TryGetMoon(SystemMoon systemMoon, out MoonInformation moon)
 		{
-			string getMoonID = $"select * from mapdenormalize where " +
-								$"itemName = '{systemMoon.Name}';";
-
 			moon = null;
-			//if (!TryRunQuery(getMoonID, out List<object> infoList))
-				//return false;
 
-			//string getMoonData = $"select * from moondata where MoonID = {infoList[0]}";
-			string getMoonData = $"select * from PublicMoonData where GameProper = '{systemMoon.Name}';";
-			if (!TryRunQuery(getMoonData, out List<object> dataList))
+			string getMoonData = $"select r.type_name, quantity" +
+								$" from moondata as l" +
+								$" left join typedata as r" +
+								$" on l.type_id = r.type_id" +
+								$" where moon_id = (" +
+									$" select item_id" +
+									$" from mapdata as a" +
+									$" where exists(" +
+										$" select item_id" +
+										$" from map" +
+										$" where a.item_name = '{systemMoon.Name}'" +
+											$" and item_id = a.item_id" +
+									$" )" +
+								$" ); ";
+			if (!TryRunQuery(getMoonData, out List<List<object>> result))
 				return false;
 
-			moon = new MoonInformation(systemMoon, dataList);
-			return !(moon is null);
+			moon = new MoonInformation(systemMoon, result);
+			return true;
 		}
 
 		/// <summary>
@@ -317,27 +325,30 @@ namespace BovrilModule
 			throw new ArgumentOutOfRangeException("something bad happened");
 		}
 
-		bool TryRunQuery(string query, out List<object> rows)
+		bool TryRunQuery(string query, out List<List<object>> result)
 		{
 			if (dbConnection.State != ConnectionState.Open)
-				dbConnection.OpenAsync().GetAwaiter().GetResult();
+				dbConnection.Open();
 
-			rows = new List<object>();
 			var cmd = new MySqlCommand(query, dbConnection);
-			var reader = cmd.ExecuteReader();
+			DbDataReader reader = cmd.ExecuteReader();
 
-			if (!reader.HasRows)
+			result = new List<List<object>>();
+			while (reader.Read())
 			{
-				reader.Close();
-				return false;
+				List<object> row = new List<object>();
+				for (int i = 0; i < reader.FieldCount; i++)
+				{
+					row.Add(reader.GetValue(i));
+				}
+
+				result.Add(row);
 			}
 
-			reader.Read();
-			for (int i = 0; i < reader.FieldCount; i++)
-				rows.Add(reader[i]);
+			if (!reader.IsClosed)
+				reader.Close();
 
-			reader.Close();
-			return true;
+			return result.Count > 0;
 		}
 	}
 }

@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "BovrilModule": {
+      "commandName": "Project",
+      "workingDirectory": "C:\\Users\\henst\\source\\repos\\henrik9864\\Yahurrbot-v3\\YahurrFramework\\bin\\Release\\netcoreapp2.1\\publish\\"
+    }
+  }
+}

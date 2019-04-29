@@ -133,6 +133,20 @@ namespace NModule
 			return await AddNotification(notification);
 		}
 
+		public Notification GetNotification(DateTime dateTime, TimeSpan span)
+		{
+			foreach (KeyValuePair<DateTime, Notification> item in notifications)
+			{
+				DateTime start = dateTime - span;
+				DateTime end = dateTime + span;
+
+				if (item.Key > start && item.Key < end)
+					return item.Value;
+			}
+
+			return null;
+		}
+
 		public async Task<Notification> AddNotification(Notification notification)
 		{
 			notifications.Add(notification.Time, notification);

@@ -190,55 +190,183 @@ namespace BovrilModule
 		#endregion
 
 		[JsonProperty]
-		IList<object> data;
+		List<List<object>> data;
 
 		[JsonConstructor]
-		public MoonInformation(SystemMoon systemMoon, IList<object> data) : base(systemMoon)
+		public MoonInformation(SystemMoon systemMoon, List<List<object>> data) : base(systemMoon)
 		{
 			this.data = data;
 
+			for (int i = 0; i < data.Count; i++)
+			{
+				List<object> row = data[i];
+
+				#region MoonOre
+
+				// Ubiquituous
+				if (row[0].ToString() == "Bitumens")
+					Bitumens = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Sylvite")
+					Sylvite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Coesite")
+					Coesite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Zeolites")
+					Zeolites = float.Parse(row[1].ToString());
+
+				// Common
+				if (row[0].ToString() == "Cobaltite")
+					Cobaltite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Euxenite")
+					Euxenite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Scheelite")
+					Scheelite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Titanite")
+					Titanite = float.Parse(row[1].ToString());
+
+				// Uncommon
+				if (row[0].ToString() == "Chromite")
+					Chromite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Otavite")
+					Otavite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Sperrylite")
+					Sperrylite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Vanadinite")
+					Vanadinite = float.Parse(row[1].ToString());
+
+				// Rare
+				if (row[0].ToString() == "Carnotite")
+					Carnotite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Cinnabar")
+					Cinnabar = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Pollucite")
+					Pollucite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Zircon")
+					Zircon = float.Parse(row[1].ToString());
+
+				// Exceptional
+				if (row[0].ToString() == "Loparite")
+					Loparite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Monazite")
+					Monazite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Xenotime")
+					Xenotime = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Ytterbite")
+					Ytterbite = float.Parse(row[1].ToString());
+
+				// High sec
+				if (row[0].ToString() == "Veldspar")
+					Veldspar = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Scordite")
+					Scordite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Pyroxeres")
+					Pyroxeres = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Plagioclase")
+					Plagioclase = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Omber")
+					Omber = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Kernite")
+					Kernite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Jaspet")
+					Jaspet = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Hemorphite")
+					Hemorphite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Hedbergite")
+					Hedbergite = float.Parse(row[1].ToString());
+
+				// Null sec
+				if (row[0].ToString() == "Gneiss")
+					Gneiss = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Ochre")
+					Ochre = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Spodumain")
+					Spodumain = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Crokite")
+					Crokite = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Bistot")
+					Bistot = float.Parse(row[1].ToString());
+				else if (row[0].ToString() == "Arkonor")
+					Arkonor = float.Parse(row[1].ToString());
+
+				#endregion
+
+				#region Rarity
+
+				if (Exceptional > 0)
+				{
+					Rarity = "R64";
+
+					if (Loparite > 0)
+						RarityCount++;
+					else if (Monazite > 0)
+						RarityCount++;
+					else if (Xenotime > 0)
+						RarityCount++;
+					else if (Ytterbite > 0)
+						RarityCount++;
+				}
+				else if (Rare > 0)
+				{
+					Rarity = "R32";
+
+					if (Carnotite > 0)
+						RarityCount++;
+					else if (Cinnabar > 0)
+						RarityCount++;
+					else if (Pollucite > 0)
+						RarityCount++;
+					else if (Zircon > 0)
+						RarityCount++;
+				}
+				else if (Uncommon > 0)
+				{
+					Rarity = "R32";
+
+					if (Chromite > 0)
+						RarityCount++;
+					else if (Otavite > 0)
+						RarityCount++;
+					else if (Sperrylite > 0)
+						RarityCount++;
+					else if (Vanadinite > 0)
+						RarityCount++;
+				}
+				else if (Common > 0)
+				{
+					Rarity = "R16";
+
+					if (Cobaltite > 0)
+						RarityCount++;
+					else if (Euxenite > 0)
+						RarityCount++;
+					else if (Scheelite > 0)
+						RarityCount++;
+					else if (Titanite > 0)
+						RarityCount++;
+				}
+				else if (Ubiquitous > 0)
+				{
+					Rarity = "R8";
+
+					if (Bitumens > 0)
+						RarityCount++;
+					else if (Coesite > 0)
+						RarityCount++;
+					else if (Sylvite > 0)
+						RarityCount++;
+					else if (Zeolites > 0)
+						RarityCount++;
+				}
+
+				#endregion
+			}
+		}
+
+		// Old parsing
+		/*
+		void OldParsing()
+		{
 			#region OreParsing
 
-			// Ubiquituous
-			Bitumens = float.Parse(data[6].ToString());
-			Sylvite = float.Parse(data[7].ToString());
-			Coesite = float.Parse(data[8].ToString());
-			Zeolites = float.Parse(data[9].ToString());
-
-			// Common
-			Cobaltite = float.Parse(data[10].ToString());
-			Euxenite = float.Parse(data[11].ToString());
-			Scheelite = float.Parse(data[12].ToString());
-			Titanite = float.Parse(data[13].ToString());
-
-			// Uncommon
-			Chromite = float.Parse(data[14].ToString());
-			Otavite = float.Parse(data[15].ToString());
-			Sperrylite = float.Parse(data[16].ToString());
-			Vanadinite = float.Parse(data[17].ToString());
-
-			// Rare
-			Carnotite = float.Parse(data[18].ToString());
-			Cinnabar = float.Parse(data[19].ToString());
-			Pollucite = float.Parse(data[20].ToString());
-			Zircon = float.Parse(data[21].ToString());
-
-			// Exceptional
-			Loparite = float.Parse(data[22].ToString());
-			Monazite = float.Parse(data[23].ToString());
-			Xenotime = float.Parse(data[24].ToString());
-			Ytterbite = float.Parse(data[25].ToString());
-
-			// High Sec
-			Veldspar = float.Parse(data[26].ToString());
-			Scordite = float.Parse(data[27].ToString());
-			Pyroxeres = float.Parse(data[28].ToString());
-			Plagioclase = float.Parse(data[29].ToString());
-			Omber = float.Parse(data[30].ToString());
-			Kernite = float.Parse(data[31].ToString());
-			Jaspet = float.Parse(data[32].ToString());
-			Hemorphite = float.Parse(data[33].ToString());
-			Hedbergite = float.Parse(data[34].ToString());
 
 			// Null sec
 			Gneiss = float.Parse(data[35].ToString());
@@ -320,5 +448,7 @@ namespace BovrilModule
 
 			#endregion
 		}
+
+	*/
 	}
 }
