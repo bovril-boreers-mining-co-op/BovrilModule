@@ -1,4 +1,5 @@
 ﻿using Discord.WebSocket;
+using Newtonsoft.Json;
 using NModule.Parser;
 using System;
 using System.Collections.Generic;
@@ -23,20 +24,28 @@ namespace NModule
 			}
 		}
 
-		SortedList<DateTime, Notification> notifications;
-		SemaphoreSlim signal;
-		NotificationParser notificationParser;
+		private NotificationParser NotificationParser { get; set; }
+
+		private JobQueueAsync JobQueue { get; set; }
+
+		JsonSerializerSettings jsonSettings = new JsonSerializerSettings()
+		{
+			TypeNameHandling = TypeNameHandling.Objects,
+			TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Full
+		};
 
 		protected override async Task Init()
 		{
-			notifications = new SortedList<DateTime, Notification>();
-			signal = new SemaphoreSlim(0, 1);
-			notificationParser = new NotificationParser(Config);
+			NotificationParser = new NotificationParser(Config);
+			JobQueue = new JobQueueAsync();
 
-			await LoadNotifications();
+			// Load previous jobqueu if it exists.
+			if (await ExistsAsync("Notifications"))
+				JobQueue = await LoadAsync("Notifications", x => JsonConvert.DeserializeObject<JobQueueAsync>(x, jsonSettings));
+
+			JobQueue.RegisterJob<Notification>(RespondNotification);
+
 			await Cleanup();
-
-			Loop();
 		}
 
 		#region Commands
@@ -44,7 +53,7 @@ namespace NModule
 		[Command("reminder", "list"), Summary("List all active notifications.")]
 		public async Task ListNotifications()
 		{
-			await RespondAsync($"```{NotificationListToString()}```");
+			await RespondAsync($"```{JobQueueToString()}```");
 		}
 
 		[Example("!del 0")]
@@ -56,26 +65,19 @@ namespace NModule
 			{
 				await RespondAsync(
 					$"```Please specify wich notification to delete.\n" +
-					$"{NotificationListToString()}```");
+					$"{JobQueueToString()}```");
 				return;
 			}
 
-			if (index >= notifications.Count)
+			if (!JobQueue.RemoveJob(index))
 			{
 				await RespondAsync("Index too high ya fool!");
 				return;
 			}
 
-			Notification notification = notifications.ElementAt(index).Value;
-			notifications.RemoveAt(index);
-			signal.Release();
-
-			string output = "```";
-			output += "Removed notification:\n";
-			output += NotificationToString(notification);
-
-			await RespondAsync(output + "```");
-			await SaveAsync("Notifications", notifications.ToList());
+			await RespondAsync($"```Notification removed!```");
+			await SaveAsync("Notifications", JobQueue, ".json",
+				x => JsonConvert.SerializeObject(x, Formatting.None, jsonSettings));
 		}
 
 		[Example("!reminder 1h 2m say This is a notification to #general")]
@@ -101,7 +103,7 @@ namespace NModule
 						throw new Exception($"Unknown channel: '{channel}'");
 				}
 
-				if (notification.Time == DateTime.Now)
+				if (notification.Start == DateTime.Now)
 					throw new Exception("Error parsing time");
 
 				if (string.IsNullOrEmpty(notification.Message))
@@ -120,11 +122,24 @@ namespace NModule
 
 		#endregion
 
+		/// <summary>
+		/// Parse user input to notification
+		/// </summary>
+		/// <param name="input"></param>
+		/// <param name="author"></param>
+		/// <returns></returns>
 		public Notification Parse(string[] input, string author)
 		{
-			return notificationParser.Parse(input, author);
+			return NotificationParser.Parse(input, author);
 		}
 
+		/// <summary>
+		/// Create and add a new notification
+		/// </summary>
+		/// <param name="dateTime"></param>
+		/// <param name="msg"></param>
+		/// <param name="channels"></param>
+		/// <returns></returns>
 		public async Task<Notification> AddNotification(DateTime dateTime, string msg, List<string> channels)
 		{
 			string authorName = (Message?.Author as SocketGuildUser)?.Nickname ?? Message.Author.Username;
@@ -133,24 +148,14 @@ namespace NModule
 			return await AddNotification(notification);
 		}
 
-		public Notification GetNotification(DateTime dateTime, TimeSpan span)
-		{
-			foreach (KeyValuePair<DateTime, Notification> item in notifications)
-			{
-				DateTime start = dateTime - span;
-				DateTime end = dateTime + span;
-
-				if (item.Key > start && item.Key < end)
-					return item.Value;
-			}
-
-			return null;
-		}
-
+		/// <summary>
+		/// Add notification.
+		/// </summary>
+		/// <param name="notification"></param>
+		/// <returns></returns>
 		public async Task<Notification> AddNotification(Notification notification)
 		{
-			notifications.Add(notification.Time, notification);
-			signal.Release();
+			JobQueue.AddJob(notification);
 
 			List<ISocketMessageChannel> channels = new List<ISocketMessageChannel>();
 			foreach (string channel in notification.Channels)
@@ -159,45 +164,26 @@ namespace NModule
 				channels.Add(foundChannel);
 			}
 
-			await SaveAsync("Notifications", notifications.ToList());
+			await SaveAsync("Notifications", JobQueue, ".json",
+				x => JsonConvert.SerializeObject(x, Formatting.None, jsonSettings));
 			await RespondAsync($"```" +
-								$"Notification added for: {notification.Time.ToString(Config.OutputTimeFormat)} to {string.Join(',', channels)}" +
+								$"Notification added for: {notification.Start.ToString(Config.OutputTimeFormat)} to {string.Join(',', channels)}" +
 								$"```");
 			return notification;
 		}
 
 		/// <summary>
-		/// Main loop for waiting on notifications
+		/// Get notification within timeframe.
 		/// </summary>
-		async void Loop()
+		/// <param name="dateTime"></param>
+		/// <param name="span"></param>
+		/// <returns></returns>
+		public Notification GetNotification(DateTime dateTime, TimeSpan span)
 		{
-			Task sephamore = signal.WaitAsync();
+			DateTime start = dateTime - span;
+			DateTime end = dateTime + span;
 
-			while (true)
-			{
-				Notification notification = notifications.FirstOrDefault().Value;
-				Task waitTask = Task.Delay(-1);
-
-				if (!(notification is null) && notification.Time > TimeZoneInfo.ConvertTimeToUtc(DateTime.Now))
-					waitTask = Task.Delay(notification.Time - TimeZoneInfo.ConvertTimeToUtc(DateTime.Now));
-
-				await Task.WhenAny(sephamore, waitTask);
-
-				if (waitTask.IsCompleted)
-				{
-					foreach (var channel in notification.Channels)
-					{
-						ISocketMessageChannel foundChannel = GetChannel<SocketGuildChannel>(channel, false) as ISocketMessageChannel;
-						await foundChannel?.SendMessageAsync(notification.Message);
-					}
-
-					notifications.Remove(notification.Time);
-					await SaveAsync("Notifications", notifications.ToList());
-				}
-
-				if (sephamore.IsCompleted)
-					sephamore = signal.WaitAsync();
-			}
+			return JobQueue.GetJob<Notification>(x => x.Start > start && x.Start < end);
 		}
 
 		/// <summary>
@@ -209,13 +195,14 @@ namespace NModule
 			await LogAsync(LogLevel.Message, $"Starting notifications cleanup...");
 
 			int found = 0;
+			List<Notification> notifications = JobQueue.GetJobs<Notification>();
 			for (int i = 0; i < notifications.Count; i++)
 			{
-				Notification notification = notifications.ElementAt(i).Value;
+				Notification notification = notifications[i];
 
-				if (notification.Time < TimeZoneInfo.ConvertTimeToUtc(DateTime.Now))
+				if (notification.Start < DateTime.UtcNow)
 				{
-					notifications.RemoveAt(i);
+					JobQueue.RemoveJob(notification);
 					found++;
 				}
 			}
@@ -223,42 +210,32 @@ namespace NModule
 			if (found > 0)
 			{
 				await LogAsync(LogLevel.Message, $"Removed {found} notification{(found == 1 ? "" : "s")}.");
-				await SaveAsync("Notifications", notifications.ToList());
+				await SaveAsync("Notifications", JobQueue, ".json",
+					x => JsonConvert.SerializeObject(x, Formatting.None, jsonSettings));
 			}
 			else
 				await LogAsync(LogLevel.Message, $"Done.");
 		}
 
-		/// <summary>
-		/// Load previous saved notifications.
-		/// </summary>
-		/// <returns></returns>
-		async Task LoadNotifications()
+		async Task RespondNotification(Notification notification)
 		{
-			if (await ExistsAsync("Notifications"))
+			foreach (var channel in notification.Channels)
 			{
-				var savedNotifications = await LoadAsync<List<KeyValuePair<DateTime, Notification>>>("Notifications");
-
-				foreach (var item in savedNotifications)
-				{
-					notifications.Add(item.Key, item.Value);
-				}
+				ISocketMessageChannel foundChannel = GetChannel<SocketGuildChannel>(channel, false) as ISocketMessageChannel;
+				await foundChannel?.SendMessageAsync(notification.Message);
 			}
 		}
 
-		string NotificationListToString()
+		string JobQueueToString()
 		{
 			string output = "";
 
+			List<Notification> notifications = JobQueue.GetJobs<Notification>();
 			if (notifications.Count == 0)
 				output += "No notifications.";
 
 			for (int i = 0; i < notifications.Count; i++)
-			{
-				Notification notification = notifications.ElementAt(i).Value;
-
-				output += $"{i} {NotificationToString(notification)}\n";
-			}
+				output += $"{i} {NotificationToString(notifications[i])}\n";
 
 			return output;
 		}
@@ -277,8 +254,8 @@ namespace NModule
 			if (shorthand.Length > 40)
 				shorthand = shorthand.Substring(0, 40) + "...";
 
-			DateTime time = TimeZoneInfo.ConvertTimeToUtc(notification.Time);
-			return $"{time.ToString(Config.OutputTimeFormat)} to {string.Join(',', channels)} by {notification.Author} say {shorthand}\n";
+			DateTime time = TimeZoneInfo.ConvertTimeToUtc(notification.Start);
+			return $"{time.ToString(Config.OutputTimeFormat)} to {string.Join(',', channels)} by {notification.Creator} say {shorthand}\n";
 		}
 	}
 }

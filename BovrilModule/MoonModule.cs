@@ -39,40 +39,6 @@ namespace BovrilModule
 		{
 			notificationModule = await GetModuleAsync<NotificationModule>();
 			moonParser = new MoonParser();
-
-			await LogAsync(LogLevel.Message, "Connecting to moon database...");
-
-			try
-			{
-				dbConnection = new MySqlConnection(Config.ConnectionString);
-				await dbConnection.OpenAsync();
-			}
-			catch (Exception)
-			{
-
-			}
-
-			int retries = 0;
-			while (dbConnection.State != ConnectionState.Open && retries <= 5)
-			{
-				await LogAsync(LogLevel.Warning, "Unable to connect to moon database, retrying in 5 seconds...");
-				await Task.Delay(5000);
-
-				try
-				{
-					await dbConnection.OpenAsync();
-				}
-				catch (Exception)
-				{
-				}
-
-				retries++;
-			}
-
-			if (dbConnection.State != ConnectionState.Open)
-				throw new Exception("Unable to connect to moon db");
-
-			await LogAsync(LogLevel.Message, "Done.");
 		}
 
 		#region Commands
@@ -95,7 +61,7 @@ namespace BovrilModule
 				if (notification.Channels == null || notification.Channels.Count == 0)
 					throw new Exception("No channels specified");
 
-				if (notification.Time == DateTime.Now)
+				if (notification.Start == DateTime.Now)
 					throw new Exception("Error parsing time");
 			}
 			catch (Exception e)
@@ -112,7 +78,7 @@ namespace BovrilModule
 				return;
 			}
 
-			notification.Time -= new TimeSpan(0, 10, 0);
+			notification.Start -= new TimeSpan(0, 10, 0);
 
 			notification.Message = string.Format(Config.MoonMessage, moon.Name);
 			notification.Message += $"```{GenerateMoonStats(moon)}```";
@@ -327,26 +293,28 @@ namespace BovrilModule
 
 		bool TryRunQuery(string query, out List<List<object>> result)
 		{
-			if (dbConnection.State != ConnectionState.Open)
-				dbConnection.Open();
-
-			var cmd = new MySqlCommand(query, dbConnection);
-			DbDataReader reader = cmd.ExecuteReader();
-
-			result = new List<List<object>>();
-			while (reader.Read())
+			using (MySqlConnection conn = new MySqlConnection(Config.ConnectionString))
 			{
-				List<object> row = new List<object>();
-				for (int i = 0; i < reader.FieldCount; i++)
+				conn.Open();
+
+				var cmd = new MySqlCommand(query, conn);
+				DbDataReader reader = cmd.ExecuteReader();
+
+				result = new List<List<object>>();
+				while (reader.Read())
 				{
-					row.Add(reader.GetValue(i));
+					List<object> row = new List<object>();
+					for (int i = 0; i < reader.FieldCount; i++)
+					{
+						row.Add(reader.GetValue(i));
+					}
+
+					result.Add(row);
 				}
 
-				result.Add(row);
+				if (!reader.IsClosed)
+					reader.Close();
 			}
-
-			if (!reader.IsClosed)
-				reader.Close();
 
 			return result.Count > 0;
 		}

@@ -1,18 +1,19 @@
 ﻿using Discord.WebSocket;
 using Newtonsoft.Json;
+using NModule.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
 namespace NModule
 {
-	public partial class Notification
+	public class Notification : IJob
 	{
 		[JsonProperty]
-		public string Author { get; private set; }
+		public string Creator { get; private set; }
 
 		[JsonProperty]
-		public DateTime Time { get; set; }
+		public DateTime Start { get; set; }
 
 		[JsonProperty]
 		public string Message { get; set; }
@@ -23,8 +24,8 @@ namespace NModule
         [JsonConstructor]
 		public Notification(string Author, DateTime Time, string Message, List<string> Channels)
 		{
-			this.Author = Author;
-			this.Time = Time;
+			this.Creator = Author;
+			this.Start = Time;
 			this.Message = Message;
 			this.Channels = Channels;
 		}

@@ -25,8 +25,4 @@
     <Folder Include="Properties\" />
   </ItemGroup>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="xcopy &quot;$(ProjectDir)bin\Debug\netcoreapp2.1\BovrilModule.dll&quot; &quot;C:\Users\henst\source\repos\henrik9864\Yahurrbot-v3\YahurrFramework\bin\Release\netcoreapp2.1\publish\Modules\BovrilModule&quot;&#xD;&#xA;xcopy &quot;$(ProjectDir)bin\Debug\netcoreapp2.1\BovrilModule.pdb&quot; &quot;C:\Users\henst\source\repos\henrik9864\Yahurrbot-v3\YahurrFramework\bin\Release\netcoreapp2.1\publish\Modules\BovrilModule&quot;" />
-  </Target>
-
 </Project>
