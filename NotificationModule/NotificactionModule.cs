@@ -14,6 +14,7 @@ using YahurrLexer;
 namespace NModule
 {
 	[Config(typeof(NotificationConfig))]
+	[RequiredModule(typeof(JobQueueModule))]
 	public class NotificationModule : YModule
 	{
 		public new NotificationConfig Config
@@ -26,24 +27,14 @@ namespace NModule
 
 		private NotificationParser NotificationParser { get; set; }
 
-		private JobQueueAsync JobQueue { get; set; }
-
-		JsonSerializerSettings jsonSettings = new JsonSerializerSettings()
-		{
-			TypeNameHandling = TypeNameHandling.Objects,
-			TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Full
-		};
+		private JobQueueModule JobQueueModule { get; set; }
 
 		protected override async Task Init()
 		{
 			NotificationParser = new NotificationParser(Config);
-			JobQueue = new JobQueueAsync();
 
-			// Load previous jobqueu if it exists.
-			if (await ExistsAsync("Notifications"))
-				JobQueue = await LoadAsync("Notifications", x => JsonConvert.DeserializeObject<JobQueueAsync>(x, jsonSettings));
-
-			JobQueue.RegisterJob<Notification>(RespondNotification);
+			JobQueueModule = await GetModuleAsync<JobQueueModule>();
+			JobQueueModule.RegisterJob<Notification>(RespondNotification);
 
 			await Cleanup();
 		}
@@ -53,7 +44,7 @@ namespace NModule
 		[Command("reminder", "list"), Summary("List all active notifications.")]
 		public async Task ListNotifications()
 		{
-			await RespondAsync($"```{JobQueueToString()}```");
+			await RespondAsync($"```{NotificationToString()}```");
 		}
 
 		[Example("!del 0")]
@@ -65,19 +56,17 @@ namespace NModule
 			{
 				await RespondAsync(
 					$"```Please specify wich notification to delete.\n" +
-					$"{JobQueueToString()}```");
+					$"{NotificationToString()}```");
 				return;
 			}
 
-			if (!JobQueue.RemoveJob(index))
+			if (!await JobQueueModule.RemoveJob(index))
 			{
 				await RespondAsync("Index too high ya fool!");
 				return;
 			}
 
 			await RespondAsync($"```Notification removed!```");
-			await SaveAsync("Notifications", JobQueue, ".json",
-				x => JsonConvert.SerializeObject(x, Formatting.None, jsonSettings));
 		}
 
 		[Example("!reminder 1h 2m say This is a notification to #general")]
@@ -155,7 +144,7 @@ namespace NModule
 		/// <returns></returns>
 		public async Task<Notification> AddNotification(Notification notification)
 		{
-			JobQueue.AddJob(notification);
+			await JobQueueModule.AddJob(notification);
 
 			List<ISocketMessageChannel> channels = new List<ISocketMessageChannel>();
 			foreach (string channel in notification.Channels)
@@ -164,8 +153,6 @@ namespace NModule
 				channels.Add(foundChannel);
 			}
 
-			await SaveAsync("Notifications", JobQueue, ".json",
-				x => JsonConvert.SerializeObject(x, Formatting.None, jsonSettings));
 			await RespondAsync($"```" +
 								$"Notification added for: {notification.Start.ToString(Config.OutputTimeFormat)} to {string.Join(',', channels)}" +
 								$"```");
@@ -183,7 +170,7 @@ namespace NModule
 			DateTime start = dateTime - span;
 			DateTime end = dateTime + span;
 
-			return JobQueue.GetJob<Notification>(x => x.Start > start && x.Start < end);
+			return JobQueueModule.GetJob<Notification>(x => x.Start > start && x.Start < end);
 		}
 
 		/// <summary>
@@ -195,23 +182,18 @@ namespace NModule
 			await LogAsync(LogLevel.Message, $"Starting notifications cleanup...");
 
 			int found = 0;
-			List<Notification> notifications = JobQueue.GetJobs<Notification>();
+			List<Notification> notifications = JobQueueModule.GetJobs<Notification>();
 			for (int i = 0; i < notifications.Count; i++)
 			{
 				Notification notification = notifications[i];
 
-				if (notification.Start < DateTime.UtcNow)
-				{
-					JobQueue.RemoveJob(notification);
+				if (notification.Start < DateTime.UtcNow && await JobQueueModule.RemoveJob(notification))
 					found++;
-				}
 			}
 
 			if (found > 0)
 			{
 				await LogAsync(LogLevel.Message, $"Removed {found} notification{(found == 1 ? "" : "s")}.");
-				await SaveAsync("Notifications", JobQueue, ".json",
-					x => JsonConvert.SerializeObject(x, Formatting.None, jsonSettings));
 			}
 			else
 				await LogAsync(LogLevel.Message, $"Done.");
@@ -226,11 +208,11 @@ namespace NModule
 			}
 		}
 
-		string JobQueueToString()
+		string NotificationToString()
 		{
 			string output = "";
 
-			List<Notification> notifications = JobQueue.GetJobs<Notification>();
+			List<Notification> notifications = JobQueueModule.GetJobs<Notification>();
 			if (notifications.Count == 0)
 				output += "No notifications.";
 

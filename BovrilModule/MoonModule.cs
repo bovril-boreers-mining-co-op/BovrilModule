@@ -15,6 +15,7 @@ using YahurrFramework.Attributes;
 using YahurrFramework.Enums;
 using System.Data;
 using System.Data.Common;
+using Discord;
 
 namespace BovrilModule
 {
@@ -31,8 +32,6 @@ namespace BovrilModule
 		}
 
 		MoonParser moonParser;
-		MySqlConnection dbConnection;
-
 		NotificationModule notificationModule;
 
 		protected override async Task Init()
@@ -106,10 +105,11 @@ namespace BovrilModule
 				string moonStats = GenerateMoonStats(moon);
 
 				if (!string.IsNullOrWhiteSpace(moonStats))
-					await RespondAsync($"\n**{moon.Name}:**\n" +
-										$"```" +
-										$"{moonStats}" +
-										$"```");
+					await PrettyMoon(moon);
+				//await RespondAsync($"\n**{moon.Name}:**\n" +
+				//					$"```" +
+				//					$"{moonStats}" +
+				//					$"```");
 				else
 					await RespondAsync($"```Moon has not been scanned. If this is a public moon please contact Prople Dudlestreis.```");
 			}
@@ -131,6 +131,108 @@ namespace BovrilModule
 			{
 				await RespondAsync(e.Message);
 			}
+		}
+
+		//[Command("prettymoon")]
+		public async Task PrettyMoon(MoonInformation moon)
+		{
+			//SystemMoon systemMoon = GetMoon("F-9PXR IV - Moon 4".Split(' '));
+			//TryGetMoon(systemMoon, out MoonInformation moon);
+
+			EmbedBuilder builder = new EmbedBuilder();
+			builder.WithAuthor(moon.Name,
+								"https://image.eveonline.com/Type/14_64.png",
+								$"http://evemaps.dotlan.net/system/{moon.System}");
+			builder.WithThumbnailUrl("https://image.eveonline.com/Render/35835_64.png");
+
+			switch (moon.Rarity)
+			{
+				case "R4":
+					builder.WithColor(new Color(255, 242, 204));
+					break;
+				case "R8":
+					builder.WithColor(new Color(255, 229, 153));
+					break;
+				case "R16":
+					builder.WithColor(new Color(255, 217, 102));
+					break;
+				case "R32":
+					builder.WithColor(new Color(224, 204, 204));
+					break;
+				case "R64":
+					builder.WithColor(new Color(234, 153, 153));
+					break;
+				default:
+					builder.WithColor(new Color(207, 226, 243));
+					break;
+			}
+
+			AddMoonStats(moon, builder);
+			await Channel.SendMessageAsync(embed: builder.Build());
+		}
+
+		SystemMoon GetMoon(string[] input)
+		{
+			return moonParser.Parse(input);
+		}
+
+		void AddMoonStats(MoonInformation moon, EmbedBuilder embed)
+		{
+			if (moon.Exceptional > 0)
+				embed.AddField($"Exceptional",
+					$"{(moon.Monazite == 0 ? "" : Math.Round(moon.Monazite * 100, 0) + "% Monazite \n")}" +
+					$"{(moon.Loparite == 0 ? "" : Math.Round(moon.Loparite * 100, 0) + "% Loparite \n")}" +
+					$"{(moon.Xenotime == 0 ? "" : Math.Round(moon.Xenotime * 100, 0) + "% Xenotime \n")}" +
+					$"{(moon.Ytterbite == 0 ? "" : Math.Round(moon.Ytterbite * 100, 0) + "% Ytterbite\n")}");
+
+			if (moon.Rare > 0)
+				embed.AddField($"Rare -- ",
+					$"{(moon.Carnotite == 0 ? "" : Math.Round(moon.Carnotite * 100, 0) + "% Carnotite \n")}" +
+					$"{(moon.Cinnabar == 0 ? "" : Math.Round(moon.Cinnabar * 100, 0) + "% Cinnabar \n")}" +
+					$"{(moon.Pollucite == 0 ? "" : Math.Round(moon.Pollucite * 100, 0) + "% Pollucite \n")}" +
+					$"{(moon.Zircon == 0 ? "" : Math.Round(moon.Zircon * 100, 0) + "% Zircon\n")}");
+
+			if (moon.Uncommon > 0)
+				embed.AddField($"Uncommon",
+					$"{(moon.Chromite == 0 ? "" : Math.Round(moon.Chromite * 100, 0) + "% Chromite \n")}" +
+					$"{(moon.Otavite == 0 ? "" : Math.Round(moon.Otavite * 100, 0) + "% Otavite \n")}" +
+					$"{(moon.Sperrylite == 0 ? "" : Math.Round(moon.Sperrylite * 100, 0) + "% Sperrylite \n")}" +
+					$"{(moon.Vanadinite == 0 ? "" : Math.Round(moon.Vanadinite * 100, 0) + "% Vanadinite\n")}");
+
+			if (moon.Common > 0)
+				embed.AddField($"Common",
+					$"{(moon.Cobaltite == 0 ? "" : Math.Round(moon.Cobaltite * 100, 0) + "% Cobaltite \n")}" +
+					$"{(moon.Euxenite == 0 ? "" : Math.Round(moon.Euxenite * 100, 0) + "% Euxenite \n")}" +
+					$"{(moon.Scheelite == 0 ? "" : Math.Round(moon.Scheelite * 100, 0) + "% Scheelite \n")}" +
+					$"{(moon.Titanite == 0 ? "" : Math.Round(moon.Titanite * 100, 0) + "% Titanite\n")}");
+
+			if (moon.Ubiquitous > 0)
+				embed.AddField($"Ubiquitous",
+					$"{(moon.Bitumens == 0 ? "" : Math.Round(moon.Bitumens * 100, 0) + "% Bitumens \n")}" +
+					$"{(moon.Coesite == 0 ? "" : Math.Round(moon.Coesite * 100, 0) + "% Coesite \n")}" +
+					$"{(moon.Sylvite == 0 ? "" : Math.Round(moon.Sylvite * 100, 0) + "% Sylvite \n")}" +
+					$"{(moon.Zeolites == 0 ? "" : Math.Round(moon.Zeolites * 100, 0) + "% Zeolites\n")}");
+
+			if (moon.HighSec > 0)
+				embed.AddField($"HighSec",
+					$"{(moon.Veldspar == 0 ? "" : Math.Round(moon.Veldspar * 100, 0) + "% Veldspar \n")}" +
+					$"{(moon.Scordite == 0 ? "" : Math.Round(moon.Scordite * 100, 0) + "% Scordite \n")}" +
+					$"{(moon.Pyroxeres == 0 ? "" : Math.Round(moon.Pyroxeres * 100, 0) + "% Pyroxeres \n")}" +
+					$"{(moon.Plagioclase == 0 ? "" : Math.Round(moon.Plagioclase * 100, 0) + "% Plagioclase \n")}" +
+					$"{(moon.Omber == 0 ? "" : Math.Round(moon.Omber * 100, 0) + "% Omber \n")}" +
+					$"{(moon.Kernite == 0 ? "" : Math.Round(moon.Kernite * 100, 0) + "% Kernite \n")}" +
+					$"{(moon.Jaspet == 0 ? "" : Math.Round(moon.Jaspet * 100, 0) + "% Jaspet \n")}" +
+					$"{(moon.Hemorphite == 0 ? "" : Math.Round(moon.Hemorphite * 100, 0) + "% Hemorphite \n")}" +
+					$"{(moon.Hedbergite == 0 ? "" : Math.Round(moon.Hedbergite * 100, 0) + "% Hedbergite\n")}");
+
+			if (moon.NullSec > 0)
+				embed.AddField($"NullSec",
+					$"{(moon.Gneiss == 0 ? "" : Math.Round(moon.Gneiss * 100, 0) + "% Gneiss \n")}" +
+					$"{(moon.Ochre == 0 ? "" : Math.Round(moon.Ochre * 100, 0) + "% Ochre \n")}" +
+					$"{(moon.Spodumain == 0 ? "" : Math.Round(moon.Spodumain * 100, 0) + "% Spodumain \n")}" +
+					$"{(moon.Crokite == 0 ? "" : Math.Round(moon.Crokite * 100, 0) + "% Crokite \n")}" +
+					$"{(moon.Bistot == 0 ? "" : Math.Round(moon.Bistot * 100, 0) + "% Bistot \n")}" +
+					$"{(moon.Arkonor == 0 ? "" : Math.Round(moon.Arkonor * 100, 0) + "% Arkonor\n")}");
 		}
 
 		#endregion
@@ -305,9 +407,7 @@ namespace BovrilModule
 				{
 					List<object> row = new List<object>();
 					for (int i = 0; i < reader.FieldCount; i++)
-					{
 						row.Add(reader.GetValue(i));
-					}
 
 					result.Add(row);
 				}

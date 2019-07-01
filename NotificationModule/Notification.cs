@@ -29,5 +29,10 @@ namespace NModule
 			this.Message = Message;
 			this.Channels = Channels;
 		}
+
+		public int CompareTo(IJob other)
+		{
+			return Start.CompareTo(other.Start);
+		}
 	}
 }

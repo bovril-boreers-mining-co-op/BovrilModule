@@ -14,7 +14,7 @@ namespace NModule
 	/// </summary>
 	/// <typeparam name="T"></typeparam>
 	/// <param name="item"></param>
-	delegate Task Job<T>(T item) where T : IJob;
+	public delegate Task Job<T>(T item) where T : IJob;
 
 	class JobQueueAsync
 	{
@@ -118,7 +118,7 @@ namespace NModule
 		/// <returns></returns>
 		public T GetJob<T>(Func<T, bool> predicate) where T : IJob
 		{
-			return (T)Jobs.First(x => x is T && predicate((T)x));
+			return (T)Jobs.FirstOrDefault(x => x is T && predicate((T)x));
 		}
 
 		/// <summary>

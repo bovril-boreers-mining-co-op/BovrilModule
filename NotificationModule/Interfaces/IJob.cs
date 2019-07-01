@@ -4,7 +4,7 @@ using System.Text;
 
 namespace NModule.Interfaces
 {
-	interface IJob
+	public interface IJob : IComparable<IJob>
 	{
 		string Creator { get; }
 

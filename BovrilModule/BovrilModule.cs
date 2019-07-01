@@ -8,6 +8,8 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using YahurrFramework;
 using YahurrFramework.Attributes;
+using EveOpenApi;
+using EveOpenApi.Api;
 
 // Mining Ledger Bot
 namespace BovrilModule
@@ -24,11 +26,21 @@ namespace BovrilModule
 			}
 		}
 
+		private ApiConfig ApiConfig { get; } = new ApiConfig()
+		{
+			UserAgent = "Bovril discord authentication;Prople Dudlestreis;henstr@hotmail.com",
+			DefaultUser = "Prople Dudlestreis",
+		};
+
 		NotificationModule notificationModule;
+		API SeAT;
 
 		protected override async Task Init()
 		{
 			notificationModule = await GetModuleAsync<NotificationModule>();
+
+			SeatLogin login = new SeatLogin("Prople Dudlestreis", "VIYcOHK2jzJ7V54GxxKOJ59jUYezgXe8");
+			SeAT = API.Create("https://seat.bovrilbloodminers.org/docs/api-docs.json", login, WebClient, ApiConfig);
 		}
 
 		protected override async Task MessageReceived(SocketMessage message)
@@ -77,6 +89,13 @@ namespace BovrilModule
 			}
 
 			await Channel.SendFileAsync("Files/Users.tsv");
+		}
+
+		[Command("user")]
+		public async Task GetUser(string user)
+		{
+			ApiResponse<dynamic> response = await SeAT.Path("/users").Get<dynamic>();
+			System.Console.WriteLine(response.Response);
 		}
 	}
 }
