@@ -24,6 +24,8 @@ namespace BovrilModule
 			}
 		}
 
+		public bool IsTatara { get; }
+
 		public string Rarity { get; }
 
 		/// <summary>
@@ -196,6 +198,7 @@ namespace BovrilModule
 		public MoonInformation(SystemMoon systemMoon, List<List<object>> data) : base(systemMoon)
 		{
 			this.data = data;
+			IsTatara = data[0][2].ToString() == "1";
 
 			for (int i = 0; i < data.Count; i++)
 			{

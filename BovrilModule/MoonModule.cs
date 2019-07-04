@@ -16,6 +16,7 @@ using YahurrFramework.Enums;
 using System.Data;
 using System.Data.Common;
 using Discord;
+using Org.BouncyCastle.Asn1.IsisMtt.X509;
 
 namespace BovrilModule
 {
@@ -139,11 +140,13 @@ namespace BovrilModule
 			//SystemMoon systemMoon = GetMoon("F-9PXR IV - Moon 4".Split(' '));
 			//TryGetMoon(systemMoon, out MoonInformation moon);
 
+			int refineryId = moon.IsTatara ? 35836 : 35835;
+
 			EmbedBuilder builder = new EmbedBuilder();
-			builder.WithAuthor(moon.Name,
+			builder.WithAuthor($"{moon.Name}",
 								"https://image.eveonline.com/Type/14_64.png",
 								$"http://evemaps.dotlan.net/system/{moon.System}");
-			builder.WithThumbnailUrl("https://image.eveonline.com/Render/35835_64.png");
+			builder.WithThumbnailUrl($"https://image.eveonline.com/Render/{refineryId}_64.png");
 
 			switch (moon.Rarity)
 			{
@@ -260,20 +263,8 @@ namespace BovrilModule
 		{
 			moon = null;
 
-			string getMoonData = $"select r.type_name, quantity" +
-								$" from moondata as l" +
-								$" left join typedata as r" +
-								$" on l.type_id = r.type_id" +
-								$" where moon_id = (" +
-									$" select item_id" +
-									$" from mapdata as a" +
-									$" where exists(" +
-										$" select item_id" +
-										$" from map" +
-										$" where a.item_name = '{systemMoon.Name}'" +
-											$" and item_id = a.item_id" +
-									$" )" +
-								$" ); ";
+			string getMoonData = $"SELECT c.type_name, b.quantity, if (d.type = 'Tatara', true, false) FROM mapdata a,  moondata b, typedata c,  moonrefinery d WHERE a.item_name = '{systemMoon.Name}' AND b.moon_id = a.item_id AND d.moon_id = a.item_id AND c.type_id = b.type_id;";
+			Console.WriteLine(getMoonData);
 			if (!TryRunQuery(getMoonData, out List<List<object>> result))
 				return false;
 
