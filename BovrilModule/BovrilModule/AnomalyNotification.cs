@@ -66,7 +66,16 @@ namespace BovrilModule
 			await NotifySpecial("Small", new TimeSpan(0, 20, 0), system, channels);
 		}
 
-		async Task NotifySpecial(string anom, TimeSpan timeSpan, string system, params string[] inputs)
+        [Example("!reminder ice B-7DFU #general")]
+        [Command("reminder", "ice"), Summary("Create a notification for an ice anomaly.")]
+        public async Task NotifyIce(
+            [Summary("Anomaly system name.")]string system,
+            [Summary("Channels notification will be sent to.")]params string[] channels)
+        {
+            await NotifySpecial("Ice", new TimeSpan(4, 0, 0), system, channels);
+        }
+
+        async Task NotifySpecial(string anom, TimeSpan timeSpan, string system, params string[] inputs)
 		{
 			string formattedMessage = string.Format(Config.AnomalyMessage, anom, system);
 			foreach (string channel in inputs)
