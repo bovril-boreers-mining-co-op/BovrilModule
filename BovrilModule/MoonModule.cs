@@ -263,12 +263,18 @@ namespace BovrilModule
 		{
 			moon = null;
 
-			string getMoonData = $"SELECT c.type_name, b.quantity, if (d.type = 'Tatara', true, false) FROM mapdata a,  moondata b, typedata c,  moonrefinery d WHERE a.item_name = '{systemMoon.Name}' AND b.moon_id = a.item_id AND d.moon_id = a.item_id AND c.type_id = b.type_id;";
-			Console.WriteLine(getMoonData);
+			string getMoonData = $"SELECT c.type_name, b.quantity FROM mapdata a, moondata b, typedata c WHERE a.item_name = '{systemMoon.Name}' AND b.moon_id = a.item_id AND c.type_id = b.type_id;";
+			string isTatara = $"SELECT EXISTS(SELECT * FROM moonrefinery a, mapdata b WHERE a.moon_id = b.item_id and b.item_name = '{systemMoon.Name}');";
+
+			//string getMoonData = $"SELECT c.type_name, b.quantity, if (d.type = 'Tatara', true, false) FROM mapdata a,  moondata b, typedata c,  moonrefinery d WHERE a.item_name = '{systemMoon.Name}' AND b.moon_id = a.item_id AND d.moon_id = a.item_id AND c.type_id = b.type_id;";
+			//Console.WriteLine(getMoonData);
 			if (!TryRunQuery(getMoonData, out List<List<object>> result))
 				return false;
 
-			moon = new MoonInformation(systemMoon, result);
+			if (!TryRunQuery(isTatara, out List<List<object>> tataraResult))
+				return false;
+
+			moon = new MoonInformation(systemMoon, (long)tataraResult[0][0] == 1, result);
 			return true;
 		}
 

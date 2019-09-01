@@ -27,5 +27,8 @@ namespace RecruitmentModule
 
 		[JsonProperty]
 		public string PipeName { get; set; } = "RecruitmentModule";
+
+		[JsonProperty]
+		public string WelcomeMessage { get; set; }
 	}
 }

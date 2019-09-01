@@ -11,6 +11,8 @@ namespace BovrilModule
 {
 	public partial class BovrilModule : YModule
 	{
+		#region Ore
+
 		[Example("!reminder colossal B-7DFU #general")]
 		[Command("reminder", "colossal"), Summary("Create a notification for a colossal anomaly.")]
 		public async Task NotifyColossal(
@@ -75,7 +77,49 @@ namespace BovrilModule
             await NotifySpecial("Ice", new TimeSpan(4, 0, 0), system, channels);
         }
 
-        async Task NotifySpecial(string anom, TimeSpan timeSpan, string system, params string[] inputs)
+		#endregion
+
+		#region Ice
+
+		[Example("!reminder ice B-7DFU #general")]
+        [Command("reminder", "enriched", "clear", "icicle"), Summary("Create a notification for an ice anomaly.")]
+        public async Task NotifyIceClear(
+            [Summary("Anomaly system name.")]string system,
+            [Summary("Channels notification will be sent to.")]params string[] channels)
+        {
+            await NotifySpecial("Ice", new TimeSpan(4, 0, 0), system, channels);
+        }
+
+        [Example("!reminder ice B-7DFU #general")]
+        [Command("reminder", "pristine", "white", "glase"), Summary("Create a notification for an ice anomaly.")]
+        public async Task NotifyIceGlase(
+            [Summary("Anomaly system name.")]string system,
+            [Summary("Channels notification will be sent to.")]params string[] channels)
+        {
+            await NotifySpecial("Ice", new TimeSpan(4, 0, 0), system, channels);
+        }
+
+        [Example("!reminder ice B-7DFU #general")]
+        [Command("reminder", "thick", "blue", "ice"), Summary("Create a notification for an ice anomaly.")]
+        public async Task NotifyIceBlue(
+            [Summary("Anomaly system name.")]string system,
+            [Summary("Channels notification will be sent to.")]params string[] channels)
+        {
+            await NotifySpecial("Ice", new TimeSpan(4, 0, 0), system, channels);
+        }
+
+        [Example("!reminder ice B-7DFU #general")]
+        [Command("reminder", "smooth", "glacial", "mass"), Summary("Create a notification for an ice anomaly.")]
+        public async Task NotifyIceGlacial(
+            [Summary("Anomaly system name.")]string system,
+            [Summary("Channels notification will be sent to.")]params string[] channels)
+        {
+            await NotifySpecial("Ice", new TimeSpan(4, 0, 0), system, channels);
+        }
+
+		#endregion
+
+		async Task NotifySpecial(string anom, TimeSpan anomDelay, string system, params string[] inputs)
 		{
 			string formattedMessage = string.Format(Config.AnomalyMessage, anom, system);
 			foreach (string channel in inputs)
@@ -92,11 +136,11 @@ namespace BovrilModule
 				}
 			}
 
-			DateTime spawnTime = DateTime.Now + timeSpan - new TimeSpan(0, 10, 0);
+			DateTime spawnTime = DateTime.Now + anomDelay - new TimeSpan(0, 10, 0);
 			var notification = notificationModule.GetNotification(spawnTime, new TimeSpan(0, 1, 0));
 
 			if (notification is null || notification.Message != formattedMessage)
-				await notificationModule.AddNotification(DateTime.Now + timeSpan - new TimeSpan(0, 10, 0), formattedMessage, inputs.ToList());
+				await notificationModule.AddNotification(DateTime.Now + anomDelay - new TimeSpan(0, 10, 0), formattedMessage, inputs.ToList());
 			else
 				await RespondAsync($"That anomaly has already been registerd.");
 				//await RespondAsync($"Im sorry but {notification.Author} was first.");

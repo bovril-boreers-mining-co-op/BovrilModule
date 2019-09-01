@@ -77,8 +77,11 @@ namespace RecruitmentModule
 
 		protected override async Task UserJoined(SocketGuildUser user)
 		{
-			ITextChannel channel = (ITextChannel)await Guild.GetChannelAsync(Config.LogChannel);
+			ITextChannel channel = (ITextChannel)user.Guild.GetChannel(Config.LogChannel);
 			await channel.SendMessageAsync($"{user.Username} has joined the server.");
+
+			if (string.IsNullOrEmpty(Config.WelcomeMessage))
+				await user.SendMessageAsync(string.Format(Config.WelcomeMessage, user.Username));
 		}
 
 		DateTime GetNameJobStart()
@@ -93,17 +96,10 @@ namespace RecruitmentModule
 
 		async Task ProcessJob(NameCheckerJob job)
 		{
-			try
-			{
-				await UpdateNames();
+			await UpdateNames();
 
-				// Requeue the command to ensure loop.
-				await JobQueueModule.AddJob(new NameCheckerJob("RecruitmentModule", DateTime.UtcNow + new TimeSpan(Config.NameCheckInterval, 0, 0)));
-			}
-			catch (Exception e)
-			{
-				Console.WriteLine(e);
-			}
+			// Requeue the command to ensure loop.
+			await JobQueueModule.AddJob(new NameCheckerJob("RecruitmentModule", GetNameJobStart()));
 		}
 
 		async Task SocketServer()
@@ -231,7 +227,6 @@ namespace RecruitmentModule
 
 			if (userName != eveName)
 			{
-				// Remove try here when deploy
 				await user.ModifyAsync(x => x.Nickname = eveName);
 
 				ITextChannel channel = (ITextChannel)await Guild.GetChannelAsync(Config.LogChannel);

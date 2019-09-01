@@ -195,10 +195,11 @@ namespace BovrilModule
 		List<List<object>> data;
 
 		[JsonConstructor]
-		public MoonInformation(SystemMoon systemMoon, List<List<object>> data) : base(systemMoon)
+		public MoonInformation(SystemMoon systemMoon, bool isTatara, List<List<object>> data) : base(systemMoon)
 		{
 			this.data = data;
-			IsTatara = data[0][2].ToString() == "1";
+			IsTatara = isTatara;
+			//IsTatara = data[0][2].ToString() == "1";
 
 			for (int i = 0; i < data.Count; i++)
 			{

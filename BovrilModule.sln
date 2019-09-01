@@ -11,7 +11,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KeepStarModule", "KeepStarM
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RoleModule", "RoleModule\RoleModule.csproj", "{119CD01F-CA91-462C-8A24-26D9109F9BA4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RecruitmentModule", "RecruitmentModule\RecruitmentModule.csproj", "{2C966F75-6E11-4563-B8CA-5D411ED03AA2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RecruitmentModule", "RecruitmentModule\RecruitmentModule.csproj", "{2C966F75-6E11-4563-B8CA-5D411ED03AA2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KillboardModule", "KillboardModule\KillboardModule.csproj", "{4AC87424-8CD8-4640-9726-5C8EB587DC31}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +41,10 @@ Global
 		{2C966F75-6E11-4563-B8CA-5D411ED03AA2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2C966F75-6E11-4563-B8CA-5D411ED03AA2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2C966F75-6E11-4563-B8CA-5D411ED03AA2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4AC87424-8CD8-4640-9726-5C8EB587DC31}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4AC87424-8CD8-4640-9726-5C8EB587DC31}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4AC87424-8CD8-4640-9726-5C8EB587DC31}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4AC87424-8CD8-4640-9726-5C8EB587DC31}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
