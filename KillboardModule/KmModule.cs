@@ -164,8 +164,6 @@ namespace KillboardModule
 				finalBlow.AllianceID.ToString(),
 			};
 
-			Console.WriteLine(allianceIDs.Count);
-
 			List<object> shipIDs = new List<object>()
 			{
 				killMail.Victim.ShipType.ToString(),

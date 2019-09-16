@@ -13,5 +13,9 @@ namespace BovrilModule
 		public int Timeout = 2000;
 
 		public string ConnectionString = "Server=localhost; database=moons; UID=root; password=prople;";
+
+		public ulong MoonPingChannelID = 0;
+
+		public string MoonPingMessage = "<@&568038554631143424> This moon is popping in 10 minutes!";
 	}
 }

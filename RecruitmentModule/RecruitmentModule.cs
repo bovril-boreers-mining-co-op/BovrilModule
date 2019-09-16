@@ -165,6 +165,11 @@ namespace RecruitmentModule
 			foreach (IGuildUser user in await guild.GetUsersAsync())
 			{
 				bool userAuthed = dbUser.TryGetValue(user.Id, out ulong eveId);
+
+				// Manual overide for demoicne, remember to remove after a week
+				if (eveId == 244032704)
+					userAuthed = true;
+
 				if (userAuthed)
 					await VerifyName(user, eveId);
 

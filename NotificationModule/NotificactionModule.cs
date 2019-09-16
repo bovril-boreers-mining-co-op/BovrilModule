@@ -1,4 +1,5 @@
-﻿using Discord.WebSocket;
+﻿using Discord;
+using Discord.WebSocket;
 using Newtonsoft.Json;
 using NModule.Parser;
 using System;
@@ -44,7 +45,16 @@ namespace NModule
 		[Command("reminder", "list"), Summary("List all active notifications.")]
 		public async Task ListNotifications()
 		{
-			await RespondAsync($"```{NotificationToString()}```");
+			await RespondAsync($"```{NotificationsToString()}```");
+		}
+
+		[IgnoreHelp]
+		[Command("reminder", "show")]
+		public async Task ShowNotification(int index)
+		{
+			List<Notification> notifications = JobQueueModule.GetJobs<Notification>();
+			Notification notification = notifications[index];
+			await Channel?.SendMessageAsync(notification.Message, embed: notification.Embed.Build());
 		}
 
 		[Example("!del 0")]
@@ -56,7 +66,7 @@ namespace NModule
 			{
 				await RespondAsync(
 					$"```Please specify wich notification to delete.\n" +
-					$"{NotificationToString()}```");
+					$"{NotificationsToString()}```");
 				return;
 			}
 
@@ -129,10 +139,10 @@ namespace NModule
 		/// <param name="msg"></param>
 		/// <param name="channels"></param>
 		/// <returns></returns>
-		public async Task<Notification> AddNotification(DateTime dateTime, string msg, List<string> channels)
+		public async Task<Notification> AddNotification(DateTime dateTime, string msg, List<string> channels, EmbedBuilder embed = null)
 		{
 			string authorName = (Message?.Author as SocketGuildUser)?.Nickname ?? Message.Author.Username;
-			Notification notification = new Notification(authorName, dateTime, msg, channels);
+			Notification notification = new Notification(authorName, dateTime, msg, channels, embed);
 
 			return await AddNotification(notification);
 		}
@@ -204,11 +214,11 @@ namespace NModule
 			foreach (var channel in notification.Channels)
 			{
 				ISocketMessageChannel foundChannel = GetChannel<SocketGuildChannel>(channel, false) as ISocketMessageChannel;
-				await foundChannel?.SendMessageAsync(notification.Message);
+				await foundChannel?.SendMessageAsync(notification.Message, embed: notification.Embed.Build());
 			}
 		}
 
-		string NotificationToString()
+		string NotificationsToString()
 		{
 			string output = "";
 

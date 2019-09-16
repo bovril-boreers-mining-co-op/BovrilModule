@@ -17,6 +17,12 @@ using System.Data;
 using System.Data.Common;
 using Discord;
 using Org.BouncyCastle.Asn1.IsisMtt.X509;
+using EveOpenApi;
+using EveOpenApi.Interfaces;
+using EveOpenApi.Api.Configs;
+using EveOpenApi.Authentication;
+using EveOpenApi.Api;
+using Newtonsoft.Json;
 
 namespace BovrilModule
 {
@@ -32,13 +38,28 @@ namespace BovrilModule
 			}
 		}
 
-		MoonParser moonParser;
-		NotificationModule notificationModule;
+		private MoonParser moonParser { get; set; }
+
+		private NotificationModule NotificationModule { get; set; }
+
+		IAPI api;
 
 		protected override async Task Init()
 		{
-			notificationModule = await GetModuleAsync<NotificationModule>();
+			NotificationModule = await GetModuleAsync<NotificationModule>();
 			moonParser = new MoonParser();
+
+			ILogin login = await new LoginBuilder()
+				.WithCredentials("a72fcc9ce4424ce3848d0edaa5aebbf7", "http://localhost:8080")
+				.FromFile("Files/CalendarToken.txt")
+				.BuildEve();
+
+			IApiConfig apiConfig = new EsiConfig()
+			{
+				UserAgent = "Prople Dudlestreis;henstr@hotmail.com",
+				DefaultUser = "Prople Dudlestreis"
+			};
+			api = new ApiBuilder(apiConfig, login).Build();
 		}
 
 		#region Commands
@@ -56,7 +77,7 @@ namespace BovrilModule
 			try
 			{
 				string author = (Message.Author as SocketGuildUser)?.Nickname ?? Message.Author.Username;
-				notification = notificationModule.Parse(input, author);
+				notification = NotificationModule.Parse(input, author);
 
 				if (notification.Channels == null || notification.Channels.Count == 0)
 					throw new Exception("No channels specified");
@@ -82,7 +103,7 @@ namespace BovrilModule
 
 			notification.Message = string.Format(Config.MoonMessage, moon.Name);
 			notification.Message += $"```{GenerateMoonStats(moon)}```";
-			await notificationModule.AddNotification(notification);
+			await NotificationModule.AddNotification(notification);
 		}
 
 		[Example("!moon B-7FDU 3-1")]
@@ -106,7 +127,7 @@ namespace BovrilModule
 				string moonStats = GenerateMoonStats(moon);
 
 				if (!string.IsNullOrWhiteSpace(moonStats))
-					await PrettyMoon(moon);
+					await Channel.SendMessageAsync(embed: PrettyMoon(moon).Build());
 				//await RespondAsync($"\n**{moon.Name}:**\n" +
 				//					$"```" +
 				//					$"{moonStats}" +
@@ -134,49 +155,11 @@ namespace BovrilModule
 			}
 		}
 
-		//[Command("prettymoon")]
-		public async Task PrettyMoon(MoonInformation moon)
+		[IgnoreHelp]
+		[Command("update", "moon")]
+		public async Task UpdateCalender()
 		{
-			//SystemMoon systemMoon = GetMoon("F-9PXR IV - Moon 4".Split(' '));
-			//TryGetMoon(systemMoon, out MoonInformation moon);
-
-			int refineryId = moon.IsTatara ? 35836 : 35835;
-
-			EmbedBuilder builder = new EmbedBuilder();
-			builder.WithAuthor($"{moon.Name}",
-								"https://image.eveonline.com/Type/14_64.png",
-								$"http://evemaps.dotlan.net/system/{moon.System}");
-			builder.WithThumbnailUrl($"https://image.eveonline.com/Render/{refineryId}_64.png");
-
-			switch (moon.Rarity)
-			{
-				case "R4":
-					builder.WithColor(new Color(255, 242, 204));
-					break;
-				case "R8":
-					builder.WithColor(new Color(255, 229, 153));
-					break;
-				case "R16":
-					builder.WithColor(new Color(255, 217, 102));
-					break;
-				case "R32":
-					builder.WithColor(new Color(224, 204, 204));
-					break;
-				case "R64":
-					builder.WithColor(new Color(234, 153, 153));
-					break;
-				default:
-					builder.WithColor(new Color(207, 226, 243));
-					break;
-			}
-
-			AddMoonStats(moon, builder);
-			await Channel.SendMessageAsync(embed: builder.Build());
-		}
-
-		SystemMoon GetMoon(string[] input)
-		{
-			return moonParser.Parse(input);
+			await UpdateCalendarMoons();
 		}
 
 		void AddMoonStats(MoonInformation moon, EmbedBuilder embed)
@@ -345,6 +328,79 @@ namespace BovrilModule
 					$"{(moon.Arkonor == 0 ? "" : Math.Round(moon.Arkonor * 100, 0) + "% Arkonor")}\n";
 
 			return output;
+		}
+
+		/// <summary>
+		/// Return all calendar events that is a moon pull
+		/// </summary>
+		/// <returns></returns>
+		async Task<List<(MoonInformation, DateTime)>> GetCalendarMoons()
+		{
+			IApiResponse response = await api.Path("/characters/{character_id}/calendar/").Get(("character_id", 96037287));
+			List<CalendarEvent> events = JsonConvert.DeserializeObject<List<CalendarEvent>>(response.FirstPage); //response.ToType<List<CalendarEvent>>().FirstPage;
+
+			List<(MoonInformation, DateTime)> moons = new List<(MoonInformation, DateTime)>();
+			foreach (CalendarEvent @event in events)
+			{
+				SystemMoon moon = moonParser.Parse(@event.Title.Split(' '));
+				if (!TryGetMoon(moon, out MoonInformation moonInformation))
+					break;
+
+				DateTime dateTime = DateTime.Parse(@event.EventDate);
+				moons.Add((moonInformation, dateTime));
+			}
+
+			return moons;
+		}
+
+		public EmbedBuilder PrettyMoon(MoonInformation moon)
+		{
+			//SystemMoon systemMoon = GetMoon("F-9PXR IV - Moon 4".Split(' '));
+			//TryGetMoon(systemMoon, out MoonInformation moon);
+
+			int refineryId = moon.IsTatara ? 35836 : 35835;
+
+			EmbedBuilder builder = new EmbedBuilder();
+			builder.WithAuthor($"{moon.Name}",
+								"https://image.eveonline.com/Type/14_64.png",
+								$"http://evemaps.dotlan.net/system/{moon.System}");
+			builder.WithThumbnailUrl($"https://image.eveonline.com/Render/{refineryId}_64.png");
+
+			switch (moon.Rarity)
+			{
+				case "R4":
+					builder.WithColor(new Color(255, 242, 204));
+					break;
+				case "R8":
+					builder.WithColor(new Color(255, 229, 153));
+					break;
+				case "R16":
+					builder.WithColor(new Color(255, 217, 102));
+					break;
+				case "R32":
+					builder.WithColor(new Color(224, 204, 204));
+					break;
+				case "R64":
+					builder.WithColor(new Color(234, 153, 153));
+					break;
+				default:
+					builder.WithColor(new Color(207, 226, 243));
+					break;
+			}
+
+			AddMoonStats(moon, builder);
+			return builder;
+		}
+
+		async Task UpdateCalendarMoons()
+		{
+			List<(MoonInformation, DateTime)> moons = await GetCalendarMoons();
+			foreach ((MoonInformation, DateTime) moon in moons)
+			{
+				EmbedBuilder embed = PrettyMoon(moon.Item1);
+				if (NotificationModule.GetNotification(moon.Item2 - new TimeSpan(0, 10, 0), new TimeSpan(0, 1, 0)) == null)
+					await NotificationModule.AddNotification(moon.Item2 - new TimeSpan(0, 10, 0), Config.MoonPingMessage, new List<string>() { $"<#{Config.MoonPingChannelID}>" }, embed);
+			}
 		}
 
 		/// <summary>
