@@ -1,10 +1,15 @@
 ﻿using Discord;
+using Discord.Rest;
 using Discord.WebSocket;
 using EveOpenApi;
 using EveOpenApi.Api;
+using EveOpenApi.Api.Configs;
+using EveOpenApi.Authentication;
 using EveOpenApi.Enums;
+using EveOpenApi.Interfaces;
 using MySql.Data.MySqlClient;
 using NModule;
+using Renci.SshNet.Security.Cryptography;
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
@@ -42,7 +47,7 @@ namespace RecruitmentModule
 			DefaultUser = "Prople Dudlestreis",
 		};
 
-		private API ESI { get; set; }
+		private IAPI ESI { get; set; }
 
 		IGuild guild;
 
@@ -62,8 +67,19 @@ namespace RecruitmentModule
 
 			guild = Guild;
 
-			EveLogin login = await EveLogin.FromFile("Files/EveLogin.json");
-			ESI = API.CreateEsi(EsiVersion.Latest, Datasource.Tranquility, login, config: ApiConfig);
+			ILogin login = await new LoginBuilder()
+				.WithCredentials("6715ab2423344bb396a0629e0703e75c", "http://localhost:8080")
+				.FromFile("Files/CorpMembersToken.txt")
+				.BuildEve();
+
+			IApiConfig apiConfig = new EsiConfig()
+			{
+				UserAgent = "Prople Dudlestreis;henstr@hotmail.com",
+				DefaultUser = "Prople Dudlestreis"
+			};
+			ESI = new ApiBuilder(apiConfig, login).Build();
+			/*EveLogin login = await EveLogin.FromFile("Files/EveLogin.json");
+			ESI = API.CreateEsi(EsiVersion.Latest, Datasource.Tranquility, login, config: ApiConfig);*/
 			JobQueueModule = await GetModuleAsync<JobQueueModule>();
 		}
 
@@ -94,9 +110,23 @@ namespace RecruitmentModule
 			return time;
 		}
 
+		/// <summary>
+		/// Check all names
+		/// </summary>
+		/// <param name="job"></param>
+		/// <returns></returns>
 		async Task ProcessJob(NameCheckerJob job)
 		{
-			await UpdateNames();
+			// Failsafe
+			try
+			{
+				await VerifyUsers();
+				await StoreAuditLog();
+			}
+			catch (Exception e)
+			{
+				//await LogMessage($"Recruitment loop failed with exception: {e.Message}");
+			}
 
 			// Requeue the command to ensure loop.
 			await JobQueueModule.AddJob(new NameCheckerJob("RecruitmentModule", GetNameJobStart()));
@@ -131,14 +161,25 @@ namespace RecruitmentModule
 		}
 
 		[IgnoreHelp]
-		[Command("ttnamecheck")]
-		public async Task TestCommand()
+		[Command("namecheck")]
+		public async Task NameCheck()
 		{
-			await UpdateNames();
+			await RespondAsync("Starting user verification process please wait.", false, false);
+			await VerifyUsers();
+			await RespondAsync("User verification process complete.", false, false);
 		}
 
 		[IgnoreHelp]
-		[Command("tpipecheck")]
+		[Command("audit", "store")]
+		public async Task TestCommand()
+		{
+			await RespondAsync("Storing audit log.", false, false);
+			await StoreAuditLog();
+			await RespondAsync("Done.", false, false);
+		}
+
+		[IgnoreHelp]
+		[Command("pipecheck")]
 		public async Task PipeCheck()
 		{
 			IPEndPoint localEndPoint = new IPEndPoint(IPAddress.Loopback, 55766);
@@ -154,22 +195,21 @@ namespace RecruitmentModule
 			client.Close();
 		}
 
-		async Task UpdateNames()
+		/// <summary>
+		/// Verify user roles
+		/// </summary>
+		/// <returns></returns>
+		async Task VerifyUsers()
 		{
 			//await LogMessage("Starting name update...");
-			ApiPath path = ESI.Path("/corporations/{corporation_id}/members/");
-			ApiResponse respose = await path.Get(("corporation_id", 98270640));
-			List<string> corpUsers = respose.ToType<List<string>>().Response;
+			IApiPath path = ESI.Path("/corporations/{corporation_id}/members/");
+			IApiResponse respose = await path.Get(("corporation_id", 98270640));
+			List<string> corpUsers = respose.ToType<List<string>>().FirstPage;
 
-			Dictionary<ulong, ulong> dbUser = await GetDbUsers();
+			Dictionary<ulong, ulong> dbUser = await GetAuthedUsers();
 			foreach (IGuildUser user in await guild.GetUsersAsync())
 			{
 				bool userAuthed = dbUser.TryGetValue(user.Id, out ulong eveId);
-
-				// Manual overide for demoicne, remember to remove after a week
-				if (eveId == 244032704)
-					userAuthed = true;
-
 				if (userAuthed)
 					await VerifyName(user, eveId);
 
@@ -177,17 +217,29 @@ namespace RecruitmentModule
 
 				// Check if user has correct corp roles.
 				bool corpStatus = corpUsers.Contains(eveId.ToString());
-				if (userAuthed)
-					await VerifyRole(user, guild.GetRole(Config.CorpRole), corpStatus);
+
+				// Manual overide for tablot our beloved CEO
+				if (user.Id == 164887181607960576)
+					corpStatus = true;
+
+				await VerifyRole(user, guild.GetRole(Config.CorpRole), corpStatus);
 			}
-			//await LogMessage("Done.");
+		}
+
+		async Task StoreAuditLog()
+		{
+			IEnumerable<IAuditLogEntry> auditLog = await guild.GetAuditLogsAsync();
+			foreach (IAuditLogEntry entry in auditLog)
+			{
+				await StoreAuditEntry(entry);
+			}
 		}
 
 		/// <summary>
 		/// Retrive all eve id's from the database.
 		/// </summary>
 		/// <returns></returns>
-		async Task<Dictionary<ulong, ulong>> GetDbUsers()
+		async Task<Dictionary<ulong, ulong>> GetAuthedUsers()
 		{
 			Dictionary<ulong, ulong> dbUser = new Dictionary<ulong, ulong>();
 			using (MySqlConnection conn = new MySqlConnection(Config.ConnectionString))
@@ -212,6 +264,25 @@ namespace RecruitmentModule
 			return dbUser;
 		}
 
+		async Task StoreAuditEntry(IAuditLogEntry entry)
+		{
+			using (MySqlConnection conn = new MySqlConnection(Config.AuditConnectionString))
+			{
+				conn.Open();
+
+				MySqlCommand exists = new MySqlCommand($"select exists(select * from discord where id = {entry.Id});", conn);
+				object entryExists = await exists.ExecuteScalarAsync();
+
+				if ((long)entryExists != 1)
+				{
+					object data = GetAuditData(entry.Data);
+					string query = @$"insert into discord values ({entry.Id},{entry.User.Id},'{entry.CreatedAt.ToString("yyyy-MM-dd hh:mm:ss")}',{(int)entry.Action},'{entry.Reason}','{data}');";
+					MySqlCommand cmd = new MySqlCommand(query, conn); //I really hope alice wont try to do an sql injection
+					await cmd.ExecuteNonQueryAsync();
+				}
+			}
+		}
+
 		/// <summary>
 		/// Verify that a discord users nickname is the same as his EVE name. Change it if there is a mismatch.
 		/// </summary>
@@ -220,15 +291,15 @@ namespace RecruitmentModule
 		/// <returns></returns>
 		async Task VerifyName(IGuildUser user, ulong eveId)
 		{
-			ApiResponse response = await ESI.Path("/characters/{character_id}/").Get(("character_id", eveId));
+			IApiResponse response = await ESI.Path("/characters/{character_id}/").Get(("character_id", eveId));
 
 			if (response is ApiError)
 				return;
 
-			ApiResponse<dynamic> casted = response.ToType<dynamic>();
+			IApiResponse<dynamic> casted = response.ToType<dynamic>();
 
 			string userName = string.IsNullOrEmpty(user.Nickname) ? user.Username : user.Nickname;
-			string eveName = casted.Response["name"].Value.ToString();
+			string eveName = casted.FirstPage["name"].Value.ToString();
 
 			if (userName != eveName)
 			{
@@ -277,11 +348,50 @@ namespace RecruitmentModule
 			switch (content)
 			{
 				case "namecheck":
-					await UpdateNames();
+					await VerifyUsers();
 					break;
 				default:
 					break;
 			}
+		}
+
+		/// <summary>
+		/// Convert to switch when C# 8.0 is out
+		/// </summary>
+		/// <param name="data"></param>
+		/// <returns></returns>
+		object GetAuditData(IAuditLogData data)
+		{
+			if (data.GetType() == typeof(BanAuditLogData))
+				return (data as BanAuditLogData).Target.Id;
+			if (data.GetType() == typeof(ChannelCreateAuditLogData))
+				return (data as ChannelCreateAuditLogData).ChannelId;
+			if (data.GetType() == typeof(ChannelDeleteAuditLogData))
+				return (data as ChannelDeleteAuditLogData).ChannelId;
+			if (data.GetType() == typeof(ChannelUpdateAuditLogData))
+				return (data as ChannelUpdateAuditLogData).ChannelId;
+			if (data.GetType() == typeof(EmoteCreateAuditLogData))
+				return (data as EmoteCreateAuditLogData).EmoteId;
+			if (data.GetType() == typeof(EmoteDeleteAuditLogData))
+				return (data as EmoteDeleteAuditLogData).EmoteId;
+			if (data.GetType() == typeof(KickAuditLogData))
+				return (data as KickAuditLogData).Target.Id;
+			if (data.GetType() == typeof(MemberRoleAuditLogData))
+				return (data as MemberRoleAuditLogData).Target.Id;
+			if (data.GetType() == typeof(MemberUpdateAuditLogData))
+				return (data as MemberUpdateAuditLogData).Target.Id;
+			if (data.GetType() == typeof(PruneAuditLogData))
+				return (data as PruneAuditLogData).MembersRemoved;
+			if (data.GetType() == typeof(RoleCreateAuditLogData))
+				return (data as RoleCreateAuditLogData).RoleId;
+			if (data.GetType() == typeof(RoleDeleteAuditLogData))
+				return (data as RoleDeleteAuditLogData).RoleId;
+			if (data.GetType() == typeof(RoleUpdateAuditLogData))
+				return (data as RoleUpdateAuditLogData).RoleId;
+			if (data.GetType() == typeof(UnbanAuditLogData))
+				return (data as UnbanAuditLogData).Target.Id;
+
+			return null;
 		}
 	}
 }

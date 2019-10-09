@@ -14,6 +14,9 @@ namespace RecruitmentModule
 		public string ConnectionString { get; set; }
 
 		[JsonProperty]
+		public string AuditConnectionString { get; set; }
+
+		[JsonProperty]
 		public ulong LogChannel { get; set; }
 
 		[JsonProperty]
