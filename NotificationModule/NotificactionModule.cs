@@ -54,7 +54,7 @@ namespace NModule
 		{
 			List<Notification> notifications = JobQueueModule.GetJobs<Notification>();
 			Notification notification = notifications[index];
-			await Channel?.SendMessageAsync(notification.Message, embed: notification.Embed.Build());
+			await Channel?.SendMessageAsync(notification.Message, embed: notification.Embed?.Build());
 		}
 
 		[Example("!del 0")]
@@ -164,7 +164,7 @@ namespace NModule
 			}
 
 			await RespondAsync($"```" +
-								$"Notification added for: {notification.Start.ToString(Config.OutputTimeFormat)} to {string.Join(',', channels)}" +
+								$"Notification added for: {notification.Start.ToUniversalTime().ToString(Config.OutputTimeFormat)} to {string.Join(',', channels)}" +
 								$"```");
 			return notification;
 		}
@@ -213,8 +213,10 @@ namespace NModule
 		{
 			foreach (var channel in notification.Channels)
 			{
+				List<Notification> notifications = JobQueueModule.GetJobs<Notification>();
+
 				ISocketMessageChannel foundChannel = GetChannel<SocketGuildChannel>(channel, false) as ISocketMessageChannel;
-				await foundChannel?.SendMessageAsync(notification.Message, embed: notification.Embed.Build());
+				await foundChannel?.SendMessageAsync(notification.Message, embed: notification.Embed?.Build());
 			}
 		}
 
@@ -247,7 +249,7 @@ namespace NModule
 				shorthand = shorthand.Substring(0, 40) + "...";
 
 			DateTime time = TimeZoneInfo.ConvertTimeToUtc(notification.Start);
-			return $"{time.ToString(Config.OutputTimeFormat)} to {string.Join(',', channels)} by {notification.Creator} say {shorthand}\n";
+			return $"{time.ToUniversalTime().ToString(Config.OutputTimeFormat)} to {string.Join(',', channels)} by {notification.Creator} say {shorthand}\n";
 		}
 	}
 }

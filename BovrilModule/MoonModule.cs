@@ -1,28 +1,20 @@
-﻿using CsvHelper;
-using Discord.WebSocket;
+﻿using Discord.WebSocket;
 using NModule;
 using System;
 using System.Collections.Generic;
-using System.Dynamic;
-using System.IO;
-using System.Net;
-using System.Text;
 using System.Threading.Tasks;
-using MySql.Data;
 using MySql.Data.MySqlClient;
 using YahurrFramework;
 using YahurrFramework.Attributes;
-using YahurrFramework.Enums;
-using System.Data;
 using System.Data.Common;
 using Discord;
-using Org.BouncyCastle.Asn1.IsisMtt.X509;
 using EveOpenApi;
 using EveOpenApi.Interfaces;
 using EveOpenApi.Api.Configs;
 using EveOpenApi.Authentication;
 using EveOpenApi.Api;
 using Newtonsoft.Json;
+using EveOpenApi.Authentication.Interfaces;
 
 namespace BovrilModule
 {
@@ -49,10 +41,13 @@ namespace BovrilModule
 			NotificationModule = await GetModuleAsync<NotificationModule>();
 			moonParser = new MoonParser();
 
-			ILogin login = await new LoginBuilder()
+			IOauthLogin login = await new LoginBuilder().Eve
 				.WithCredentials("a72fcc9ce4424ce3848d0edaa5aebbf7", "http://localhost:8080")
 				.FromFile("Files/CalendarToken.txt")
-				.BuildEve();
+				.Build();
+
+			//await login.AddToken((Scope)"esi-calendar.read_calendar_events.v1");
+			//login.SaveToFile("Files/CalendarToken.txt", true);
 
 			IApiConfig apiConfig = new EsiConfig()
 			{
@@ -128,31 +123,11 @@ namespace BovrilModule
 
 				if (!string.IsNullOrWhiteSpace(moonStats))
 					await Channel.SendMessageAsync(embed: PrettyMoon(moon).Build());
-				//await RespondAsync($"\n**{moon.Name}:**\n" +
-				//					$"```" +
-				//					$"{moonStats}" +
-				//					$"```");
 				else
 					await RespondAsync($"```Moon has not been scanned. If this is a public moon please contact Prople Dudlestreis.```");
 			}
 			else
 				await RespondAsync("```Moon not found or it has not been scanned. If this is a public moon please contact Prople Dudlestreis.```");
-		}
-
-		[IgnoreHelp]
-		[Command("parse", "moon")]
-		public async Task ParseMoon(params string[] input)
-		{
-			try
-			{
-				SystemMoon moon = moonParser.Parse(input);
-
-				await RespondAsync(moon.Name);
-			}
-			catch (Exception e)
-			{
-				await RespondAsync(e.Message);
-			}
 		}
 
 		[IgnoreHelp]
@@ -342,12 +317,19 @@ namespace BovrilModule
 			List<(MoonInformation, DateTime)> moons = new List<(MoonInformation, DateTime)>();
 			foreach (CalendarEvent @event in events)
 			{
-				SystemMoon moon = moonParser.Parse(@event.Title.Split(' '));
-				if (!TryGetMoon(moon, out MoonInformation moonInformation))
-					break;
+				try
+				{
+					SystemMoon moon = moonParser.Parse(@event.Title.Split(' '));
+					if (!TryGetMoon(moon, out MoonInformation moonInformation))
+						break;
 
-				DateTime dateTime = DateTime.Parse(@event.EventDate);
-				moons.Add((moonInformation, dateTime));
+					DateTime dateTime = DateTime.Parse(@event.EventDate);
+					moons.Add((moonInformation, dateTime));
+				}
+				catch (Exception)
+				{
+
+				}
 			}
 
 			return moons;
@@ -401,49 +383,6 @@ namespace BovrilModule
 				if (NotificationModule.GetNotification(moon.Item2 - new TimeSpan(0, 10, 0), new TimeSpan(0, 1, 0)) == null)
 					await NotificationModule.AddNotification(moon.Item2 - new TimeSpan(0, 10, 0), Config.MoonPingMessage, new List<string>() { $"<#{Config.MoonPingChannelID}>" }, embed);
 			}
-		}
-
-		/// <summary>
-		/// Converts 08 to 8
-		/// </summary>
-		/// <param name="planetMoon"></param>
-		/// <returns></returns>
-		string SimplifyPlanetMoon(string planetMoon)
-		{
-			int separatorIndex = planetMoon.IndexOf('-');
-
-			if (separatorIndex == -1)
-				return planetMoon;
-
-			int.TryParse(planetMoon.Substring(0, separatorIndex), out int planet);
-			int.TryParse(planetMoon.Substring(separatorIndex + 1), out int moon);
-
-			return $"{planet}-{moon}";
-		}
-
-		/// <summary>
-		/// https://stackoverflow.com/questions/7040289/converting-integers-to-roman-numerals
-		/// </summary>
-		/// <param name="number"></param>
-		/// <returns></returns>
-		public static string ToRoman(int number)
-		{
-			if ((number < 0) || (number > 3999)) throw new ArgumentOutOfRangeException("insert value betwheen 1 and 3999");
-			if (number < 1) return string.Empty;
-			if (number >= 1000) return "M" + ToRoman(number - 1000);
-			if (number >= 900) return "CM" + ToRoman(number - 900);
-			if (number >= 500) return "D" + ToRoman(number - 500);
-			if (number >= 400) return "CD" + ToRoman(number - 400);
-			if (number >= 100) return "C" + ToRoman(number - 100);
-			if (number >= 90) return "XC" + ToRoman(number - 90);
-			if (number >= 50) return "L" + ToRoman(number - 50);
-			if (number >= 40) return "XL" + ToRoman(number - 40);
-			if (number >= 10) return "X" + ToRoman(number - 10);
-			if (number >= 9) return "IX" + ToRoman(number - 9);
-			if (number >= 5) return "V" + ToRoman(number - 5);
-			if (number >= 4) return "IV" + ToRoman(number - 4);
-			if (number >= 1) return "I" + ToRoman(number - 1);
-			throw new ArgumentOutOfRangeException("something bad happened");
 		}
 
 		bool TryRunQuery(string query, out List<List<object>> result)

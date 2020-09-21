@@ -143,7 +143,6 @@ namespace BovrilModule
 				await notificationModule.AddNotification(DateTime.Now + anomDelay - new TimeSpan(0, 10, 0), formattedMessage, inputs.ToList());
 			else
 				await RespondAsync($"That anomaly has already been registerd.");
-				//await RespondAsync($"Im sorry but {notification.Author} was first.");
 		}
 	}
 }

@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="Discord.Net" Version="2.1.1" />
+    <PackageReference Include="Eve-OpenApi" Version="0.4.2" />
     <PackageReference Include="YahurrFramework" Version="1.3.5" />
     <PackageReference Include="YahurrLexer" Version="0.1.0" />
   </ItemGroup>

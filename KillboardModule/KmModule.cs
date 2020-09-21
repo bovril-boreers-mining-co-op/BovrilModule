@@ -12,7 +12,7 @@ using YahurrFramework;
 using YahurrFramework.Attributes;
 using EveOpenApi;
 using System.IO;
-using EveOpenApi.Enums;
+using EveOpenApi;
 using EveOpenApi.Api;
 using EveOpenApi.Interfaces;
 using EveOpenApi.Api.Configs;
@@ -56,17 +56,13 @@ namespace KillboardModule
 				login = await EveLogin.FromFile("Saves/BovrilModule/EveLogin.json");
 				*/
 
-			ILogin login = await new LoginBuilder()
-				.WithCredentials("", "")
-				.BuildEve();
-
 			IApiConfig config = new EsiConfig()
 			{
 				UserAgent = "Henrik_Strocka;henstr@hotmail.com;Prople_Dudlestris",
 				DefaultUser = "Prople Dudlestreis"
 			};
 
-			esi = new ApiBuilder(config, login).Build();
+			esi = new ApiBuilder(config).Build();
 
 			Loop();
 		}

@@ -280,7 +280,7 @@ namespace BovrilModule
 				// Null sec
 				if (row[0].ToString() == "Gneiss")
 					Gneiss = float.Parse(row[1].ToString());
-				else if (row[0].ToString() == "Ochre")
+				else if (row[0].ToString() == "Ochre" || row[0].ToString() == "Dark Ochre")
 					Ochre = float.Parse(row[1].ToString());
 				else if (row[0].ToString() == "Spodumain")
 					Spodumain = float.Parse(row[1].ToString());
@@ -364,95 +364,5 @@ namespace BovrilModule
 				#endregion
 			}
 		}
-
-		// Old parsing
-		/*
-		void OldParsing()
-		{
-			#region OreParsing
-
-
-			// Null sec
-			Gneiss = float.Parse(data[35].ToString());
-			Ochre = float.Parse(data[36].ToString());
-			Spodumain = float.Parse(data[37].ToString());
-			Crokite = float.Parse(data[38].ToString());
-			Bistot = float.Parse(data[39].ToString());
-			Arkonor = float.Parse(data[40].ToString());
-
-			#endregion
-
-			#region Rarity
-
-			if (Exceptional > 0)
-			{
-				Rarity = "R64";
-
-				if (Loparite > 0)
-					RarityCount++;
-				else if (Monazite > 0)
-					RarityCount++;
-				else if (Xenotime > 0)
-					RarityCount++;
-				else if (Ytterbite > 0)
-					RarityCount++;
-			}
-			else if (Rare > 0)
-			{
-				Rarity = "R32";
-
-				if (Carnotite > 0)
-					RarityCount++;
-				else if (Cinnabar > 0)
-					RarityCount++;
-				else if (Pollucite > 0)
-					RarityCount++;
-				else if (Zircon > 0)
-					RarityCount++;
-			}
-			else if (Uncommon > 0)
-			{
-				Rarity = "R32";
-
-				if (Chromite > 0)
-					RarityCount++;
-				else if (Otavite > 0)
-					RarityCount++;
-				else if (Sperrylite > 0)
-					RarityCount++;
-				else if (Vanadinite > 0)
-					RarityCount++;
-			}
-			else if (Common > 0)
-			{
-				Rarity = "R16";
-
-				if (Cobaltite > 0)
-					RarityCount++;
-				else if (Euxenite > 0)
-					RarityCount++;
-				else if (Scheelite > 0)
-					RarityCount++;
-				else if (Titanite > 0)
-					RarityCount++;
-			}
-			else if (Ubiquitous > 0)
-			{
-				Rarity = "R8";
-
-				if (Bitumens > 0)
-					RarityCount++;
-				else if (Coesite > 0)
-					RarityCount++;
-				else if (Sylvite > 0)
-					RarityCount++;
-				else if (Zeolites > 0)
-					RarityCount++;
-			}
-
-			#endregion
-		}
-
-	*/
 	}
 }

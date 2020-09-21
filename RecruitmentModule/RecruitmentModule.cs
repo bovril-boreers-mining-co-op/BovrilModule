@@ -5,9 +5,11 @@ using EveOpenApi;
 using EveOpenApi.Api;
 using EveOpenApi.Api.Configs;
 using EveOpenApi.Authentication;
+using EveOpenApi.Authentication.Interfaces;
 using EveOpenApi.Enums;
 using EveOpenApi.Interfaces;
 using MySql.Data.MySqlClient;
+using Newtonsoft.Json;
 using NModule;
 using Renci.SshNet.Security.Cryptography;
 using System;
@@ -41,7 +43,7 @@ namespace RecruitmentModule
 
 		private JobQueueModule JobQueueModule { get; set; }
 
-		private ApiConfig ApiConfig { get; } = new ApiConfig()
+		private IApiConfig ApiConfig { get; } = new ApiConfig()
 		{
 			UserAgent = "Bovril discord authentication;Prople Dudlestreis;henstr@hotmail.com",
 			DefaultUser = "Prople Dudlestreis",
@@ -67,19 +69,23 @@ namespace RecruitmentModule
 
 			guild = Guild;
 
-			ILogin login = await new LoginBuilder()
+			IOauthLogin login = await new LoginBuilder().Eve
 				.WithCredentials("6715ab2423344bb396a0629e0703e75c", "http://localhost:8080")
 				.FromFile("Files/CorpMembersToken.txt")
-				.BuildEve();
+				.Build();
+
+			//await login.AddToken((Scope)"esi-corporations.read_corporation_membership.v1");
+			//login.SaveToFile("Files/CorpMembersToken.txt", true);
 
 			IApiConfig apiConfig = new EsiConfig()
 			{
 				UserAgent = "Prople Dudlestreis;henstr@hotmail.com",
 				DefaultUser = "Prople Dudlestreis"
 			};
+
+			await LogAsync(LogLevel.Message, "Setting Esi.");
 			ESI = new ApiBuilder(apiConfig, login).Build();
-			/*EveLogin login = await EveLogin.FromFile("Files/EveLogin.json");
-			ESI = API.CreateEsi(EsiVersion.Latest, Datasource.Tranquility, login, config: ApiConfig);*/
+			await LogAsync(LogLevel.Message, "Done.");
 			JobQueueModule = await GetModuleAsync<JobQueueModule>();
 		}
 
@@ -126,6 +132,7 @@ namespace RecruitmentModule
 			catch (Exception e)
 			{
 				//await LogMessage($"Recruitment loop failed with exception: {e.Message}");
+				await LogAsync(e);
 			}
 
 			// Requeue the command to ensure loop.
@@ -195,6 +202,23 @@ namespace RecruitmentModule
 			client.Close();
 		}
 
+		[IgnoreHelp]
+		[Command("listusers")]
+		public async Task ListUsers()
+		{
+			Console.WriteLine("1");
+			Console.WriteLine($"{(await Guild.GetUsersAsync()).Count}");
+			Console.WriteLine("Hi?");
+			foreach (var item in await Guild.GetUsersAsync())
+			{
+				if (item.Nickname == "Prople Dudlestreis")
+					Console.WriteLine(item.Username);
+
+				//Console.WriteLine(item.Username);
+			}
+			Console.WriteLine("Done");
+		}
+
 		/// <summary>
 		/// Verify user roles
 		/// </summary>
@@ -202,17 +226,24 @@ namespace RecruitmentModule
 		async Task VerifyUsers()
 		{
 			//await LogMessage("Starting name update...");
-			IApiPath path = ESI.Path("/corporations/{corporation_id}/members/");
-			IApiResponse respose = await path.Get(("corporation_id", 98270640));
-			List<string> corpUsers = respose.ToType<List<string>>().FirstPage;
+			IApiPath corpPath = ESI.Path("/corporations/{corporation_id}/members/");
+			if (corpPath is ApiError)
+				return;
 
-			Dictionary<ulong, ulong> dbUser = await GetAuthedUsers();
+			IApiResponse corpUsersResponse = await corpPath.Get(("corporation_id", 98270640));
+			List<string> corpUsers = corpUsersResponse.ToType<List<string>>().FirstPage;
+
+			Dictionary<ulong, ulong> dbUsers = await GetAuthedUsers();
 			foreach (IGuildUser user in await guild.GetUsersAsync())
 			{
-				bool userAuthed = dbUser.TryGetValue(user.Id, out ulong eveId);
+				bool userAuthed = dbUsers.TryGetValue(user.Id, out ulong eveId);
 				if (userAuthed)
+				{
 					await VerifyName(user, eveId);
+					await VerifyAlliance(user, guild.GetRole(Config.AllianceRole), eveId);
+				}
 
+				//await LogAsync(LogLevel.Message, $"{(string.IsNullOrEmpty(user.Nickname) ? user.Username : user.Nickname)}: Authed, {userAuthed} EveId, {eveId}");
 				await VerifyRole(user, guild.GetRole(Config.AuthedRole), userAuthed);
 
 				// Check if user has correct corp roles.
@@ -224,6 +255,17 @@ namespace RecruitmentModule
 
 				await VerifyRole(user, guild.GetRole(Config.CorpRole), corpStatus);
 			}
+		}
+
+		async Task VerifyAlliance(IGuildUser user, IRole allianceRole, ulong eveId)
+		{
+			IApiResponse characterInfo = await ESI.Path("/characters/{character_id}/").Get(("character_id", eveId));
+			string corpID = JsonConvert.DeserializeObject<dynamic>(characterInfo.FirstPage)["corporation_id"];
+
+			IApiResponse allianceCorpsResponse = await ESI.Path("/alliances/{alliance_id}/corporations/").Get(("alliance_id", 1354830081));
+			List<string> allianceCorps = allianceCorpsResponse.ToType<List<string>>().FirstPage;
+
+			await VerifyRole(user, allianceRole, allianceCorps.Contains(corpID));
 		}
 
 		async Task StoreAuditLog()

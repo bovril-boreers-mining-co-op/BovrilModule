@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json;
 using NModule.Interfaces;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -18,7 +19,7 @@ namespace NModule
 
 	class JobQueueAsync
 	{
-		private Dictionary<Type, Job<IJob>> JobMethods { get; }
+		private ConcurrentDictionary<Type, Job<IJob>> JobMethods { get; }
 
 		[JsonProperty]
 		private SortedSet<IJob> Jobs { get; }
@@ -28,14 +29,14 @@ namespace NModule
 
 		public JobQueueAsync()
 		{
-			JobMethods = new Dictionary<Type, Job<IJob>>();
+			JobMethods = new ConcurrentDictionary<Type, Job<IJob>>();
 			Jobs = new SortedSet<IJob>(new JobComparer());
 		}
 
 		[JsonConstructor]
 		private JobQueueAsync(SortedSet<IJob> jobs)
 		{
-			JobMethods = new Dictionary<Type, Job<IJob>>();
+			JobMethods = new ConcurrentDictionary<Type, Job<IJob>>();
 			Jobs = jobs;
 
 			// Start job processing loop so it can deal with saved jobs
@@ -50,10 +51,7 @@ namespace NModule
 		/// <param name="job"></param>
 		public void RegisterJob<T>(Job<T> job) where T : IJob
 		{
-			lock (JobMethods)
-			{
-				JobMethods[typeof(T)] = o => job((T)o);
-			}
+			JobMethods[typeof(T)] = o => job((T)o);
 		}
 
 		/// <summary>
@@ -63,11 +61,8 @@ namespace NModule
 		/// <param name="job"></param>
 		public void AddJob<T>(T job) where T : IJob
 		{
-			lock (JobMethods)
-			{
-				if (!JobMethods.ContainsKey(typeof(T)))
-					throw new Exception($"No job registerd for type {typeof(T)}");
-			}
+			if (!JobMethods.ContainsKey(typeof(T)))
+				throw new Exception($"No job registerd for type {typeof(T)}");
 
 			lock (Jobs)
 			{
@@ -87,11 +82,14 @@ namespace NModule
 		/// <returns></returns>
 		public bool RemoveJob<T>(T job) where T : IJob
 		{
-			if (Jobs.Remove(job))
+			lock (Jobs)
 			{
-				CheckSemaphore();
+				if (Jobs.Remove(job))
+				{
+					CheckSemaphore();
 
-				return true;
+					return true;
+				}
 			}
 
 			return false;
@@ -150,26 +148,15 @@ namespace NModule
 					job = Jobs.First();
 				}
 
-				Task waitTask = Task.Delay(0);
-				Task jobWaitTask = Task.Delay(0);
-
-				lock (semaphore)
-					waitTask = semaphore.WaitAsync();
-
-				if (job.Start.CompareTo(DateTime.UtcNow) == 1)
-					jobWaitTask = Task.Delay(job.Start - DateTime.UtcNow);
-
-				await Task.WhenAny(waitTask, jobWaitTask);
-
-				if (jobWaitTask.IsCompleted)
+				bool jobCompleted = await WaitForJobOrInterupt(job);
+				if (jobCompleted)
 				{
 					lock (Jobs)
 						Jobs.Remove(job);
 
 					try
 					{
-						lock (JobMethods)
-							JobMethods[job.GetType()].Invoke(job);
+						await JobMethods[job.GetType()].Invoke(job);
 					}
 					catch (Exception)
 					{
@@ -179,6 +166,21 @@ namespace NModule
 			}
 
 			loopRunning = false;
+		}
+
+		async Task<bool> WaitForJobOrInterupt(IJob job)
+		{
+			Task waitTask = Task.Delay(0);
+			Task jobWaitTask = Task.Delay(0);
+
+			waitTask = semaphore.WaitAsync();
+
+			if (job.Start.CompareTo(DateTime.UtcNow) == 1)
+				jobWaitTask = Task.Delay(job.Start - DateTime.UtcNow);
+
+			await Task.WhenAny(waitTask, jobWaitTask);
+
+			return jobWaitTask.IsCompleted;
 		}
 
 		/// <summary>

@@ -10,6 +10,11 @@ using YahurrFramework;
 using YahurrFramework.Attributes;
 using EveOpenApi;
 using EveOpenApi.Api;
+using EveOpenApi.Interfaces;
+using EveOpenApi.Authentication.Interfaces;
+using EveOpenApi.Authentication;
+using EveOpenApi.Interfaces.Configs;
+using EveOpenApi.Api.Configs;
 
 // Mining Ledger Bot
 namespace BovrilModule
@@ -26,10 +31,11 @@ namespace BovrilModule
 			}
 		}
 
-		private ApiConfig ApiConfig { get; } = new ApiConfig()
+		private IApiConfig ApiConfig { get; } = new SeATConfig()
 		{
 			UserAgent = "Bovril discord authentication;Prople Dudlestreis;henstr@hotmail.com",
 			DefaultUser = "Prople Dudlestreis",
+			SpecURL = "https://seat.bovrilbloodminers.org/docs/api-docs.json"
 		};
 
 		NotificationModule notificationModule;
@@ -38,8 +44,11 @@ namespace BovrilModule
 		{
 			notificationModule = await GetModuleAsync<NotificationModule>();
 
-			//SeatLogin login = new SeatLogin("Prople Dudlestreis", "VIYcOHK2jzJ7V54GxxKOJ59jUYezgXe8");
-			//SeAT = API.Create("https://seat.bovrilbloodminers.org/docs/api-docs.json", login, WebClient, ApiConfig);
+			IKeyLogin login = new LoginBuilder().Key
+				.Build();
+
+			login.AddKey("VIYcOHK2jzJ7V54GxxKOJ59jUYezgXe8", "Prople Dudlestreis", (Scope)"");
+			//login.SaveToFile("Files/SeatLogin.json", true);
 		}
 
 		protected override async Task MessageReceived(SocketMessage message)

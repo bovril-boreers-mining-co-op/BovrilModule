@@ -29,6 +29,12 @@ namespace RecruitmentModule
 		public ulong CorpRole { get; set; }
 
 		[JsonProperty]
+		public ulong AllianceRole { get; set; }
+
+		[JsonProperty]
+		public ulong LegacyRole { get; set; }
+
+		[JsonProperty]
 		public string PipeName { get; set; } = "RecruitmentModule";
 
 		[JsonProperty]
