@@ -1,19 +1,19 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json.Serialization;
 
-namespace KillboardModule
+namespace Modules
 {
-	internal class Item
+	public struct Item
 	{
-		[JsonProperty("flag")]
-		public int Flag { get; private set; }
+		[JsonPropertyName("flag")]
+		public int Flag { get; set; }
 
-		[JsonProperty("type_id")]
-		public int TypeID { get; private set; }
+		[JsonPropertyName("type_id")]
+		public int TypeID { get; set; }
 
-		[JsonProperty("quantity_dropped")]
-		public int QuantityDropped { get; private set; }
+		[JsonPropertyName("quantity_dropped")]
+		public int QuantityDropped { get; set; }
 
-		[JsonProperty("singleton")]
-		public int Singleton { get; private set; }
+		[JsonPropertyName("singleton")]
+		public int Singleton { get; set; }
 	}
 }

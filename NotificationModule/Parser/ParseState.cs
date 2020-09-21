@@ -1,4 +1,4 @@
-﻿namespace NModule
+﻿namespace Modules.NotificationParser
 {
     enum ParseState
     {

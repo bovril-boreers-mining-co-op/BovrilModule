@@ -1,19 +1,28 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json.Serialization;
 
-namespace KillboardModule
+namespace Modules
 {
-	internal class Attacker : Character
+	public struct Attacker
 	{
-		[JsonProperty("damage_done")]
-		public ulong DamageDone { get; private set; }
+		[JsonPropertyName("character_id")]
+		public ulong CharacterID { get; set; }
 
-		[JsonProperty("final_blow")]
-		public bool FinalBlow { get; private set; }
+		[JsonPropertyName("corporation_id")]
+		public ulong CorporationID { get; set; }
 
-		[JsonProperty("security_status")]
-		public float SecurityStatus { get; private set; }
+		[JsonPropertyName("ship_type_id")]
+		public int ShipType { get; set; }
 
-		[JsonProperty("weapon_type_id")]
-		public int WeaponType { get; private set; }
+		[JsonPropertyName("damage_done")]
+		public ulong DamageDone { get; set; }
+
+		[JsonPropertyName("final_blow")]
+		public bool FinalBlow { get; set; }
+
+		[JsonPropertyName("security_status")]
+		public float SecurityStatus { get; set; }
+
+		[JsonPropertyName("weapon_type_id")]
+		public int WeaponType { get; set; }
 	}
 }

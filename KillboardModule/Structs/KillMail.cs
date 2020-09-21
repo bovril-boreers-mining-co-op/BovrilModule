@@ -1,28 +1,28 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.Json.Serialization;
 
-namespace KillboardModule
+namespace Modules
 {
-	internal class KillMail
+	public struct KillMail
 	{
-		[JsonProperty("attackers")]
-		public List<Attacker> Attackers { get; private set; }
+		[JsonPropertyName("attackers")]
+		public List<Attacker> Attackers { get; set; }
 
-		[JsonProperty("killmail_id")]
-		public ulong Killmail { get; private set; }
+		[JsonPropertyName("killmail_id")]
+		public ulong KillmailId { get; set; }
 
-		[JsonProperty("killmail_time")]
-		public string Time { get; private set; }
+		[JsonPropertyName("killmail_time")]
+		public string Time { get; set; }
 
-		[JsonProperty("solar_system_id")]
-		public ulong Solarsystem { get; private set; }
+		[JsonPropertyName("solar_system_id")]
+		public ulong Solarsystem { get; set; }
 
-		[JsonProperty("victim")]
-		public Victim Victim { get; private set; }
+		[JsonPropertyName("victim")]
+		public Victim Victim { get; set; }
 
-		[JsonProperty("zkb")]
-		public ZKB Zkb { get; private set; }
+		[JsonPropertyName("zkb")]
+		public ZKB Zkb { get; set; }
 	}
 }

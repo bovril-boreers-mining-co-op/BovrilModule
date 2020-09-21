@@ -1,12 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.0</TargetFramework>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Eve-OpenApi" Version="0.4.1" />
-    <PackageReference Include="YahurrFramework" Version="1.3.5" />
+    <PackageReference Include="YahurrFramework" Version="1.3.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DatabaseModule\DatabaseModule.csproj" />
+    <ProjectReference Include="..\JobModule\JobModule.csproj" />
+    <ProjectReference Include="..\LogModule\LogModule.csproj" />
   </ItemGroup>
 
 </Project>

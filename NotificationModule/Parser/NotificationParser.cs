@@ -7,112 +7,204 @@ using YahurrFramework;
 using YahurrFramework.Attributes;
 using YahurrLexer;
 
-namespace NModule.Parser
+namespace Modules.NotificationParser
 {
-	class NotificationParser
-	{
-		NotificationConfig Config { get; }
+    class NotificationParser
+    {
+        NotificationModuleConfig Config { get; }
 
-		Lexer<TokenType> Lexer { get; }
+        Lexer<TokenType> Lexer { get; }
 
-		public NotificationParser(NotificationConfig config)
-		{
-			Config = config;
+        public NotificationParser(NotificationModuleConfig config)
+        {
+            Config = config;
 
-			Lexer = new Lexer<TokenType>();
-			Lexer.AddRule(new Rule(@"^(?<Separator>on|say|to|in)$"));
+            Lexer = new Lexer<TokenType>();
+            Lexer.AddRule(new Rule(@"^(?<Separator>on|say|to|in)$"));
 
-			Lexer.AddRule(new Rule(@"^(?<Number>[0-9]+)?(?<TimeSpecifier>day(?:s)?|d)$"));
-			Lexer.AddRule(new Rule(@"^(?<Number>[0-9]+)?(?<TimeSpecifier>hour(?:s)?|h)$"));
-			Lexer.AddRule(new Rule(@"^(?<Number>[0-9]+)?(?<TimeSpecifier>minute(?:s)?|m|min(?:s)?)$"));
-			Lexer.AddRule(new Rule(@"^(?<Number>[0-9]+)?(?<TimeSpecifier>second(?:s)?|s)$"));
+            Lexer.AddRule(new Rule(@"^(?<Number>[0-9]+)?(?<TimeSpecifier>day(?:s)?|d)$"));
+            Lexer.AddRule(new Rule(@"^(?<Number>[0-9]+)?(?<TimeSpecifier>hour(?:s)?|h)$"));
+            Lexer.AddRule(new Rule(@"^(?<Number>[0-9]+)?(?<TimeSpecifier>minute(?:s)?|m|min(?:s)?)$"));
+            Lexer.AddRule(new Rule(@"^(?<Number>[0-9]+)?(?<TimeSpecifier>second(?:s)?|s)$"));
 
-			Lexer.AddRule(new Rule(@"(?<Selector><|>)+"));
-			Lexer.AddRule(new Rule(@"^(?<Number>[0-9]+)$"));
-			Lexer.AddRule(new Rule(@"(?<Text>[^ ]+)"));
-		}
+            Lexer.AddRule(new Rule(@"(?<Selector><|>)+"));
+            Lexer.AddRule(new Rule(@"^(?<Number>[0-9]+)$"));
+            Lexer.AddRule(new Rule(@"(?<Text>[^ ]+)"));
+        }
 
-		/// <summary>
-		/// Parse a DateTime from a string.
-		/// </summary>
-		/// <param name="input"></param>
-		/// <returns></returns>
-		public Notification Parse(string[] input, string author)
-		{
-			Lexer.Lex(input);
-			ParseState state = ParseState.Time;
+        /// <summary>
+        /// Parse a DateTime from a string.
+        /// </summary>
+        /// <param name="input"></param>
+        /// <returns></returns>
+        public NotificationJob Parse(string[] input, string author)
+        {
+            Lexer.Lex(input);
+            ParseState state = ParseState.Time;
 
-			bool timeDone = false;
-			bool channelDone = false;
+            bool timeDone = false;
+            bool channelDone = false;
 
             string message = "";
-            DateTime dateTime = TimeZoneInfo.ConvertTimeToUtc(DateTime.Now);
+            DateTime dateTime = DateTime.UtcNow;
             TimeSpan timeSpan = new TimeSpan();
-			List<string> channels = new List<string>();
+            List<string> channels = new List<string>();
 
-			Token<TokenType> token = Lexer.GetToken();
-			while (token != null)
-			{
-				if (token.Type == TokenType.Separator)
-				{
-                    state = ChangeState(token);
+            Token<TokenType> token = Lexer.GetToken();
+            while (token != null)
+            {
+                if (token.Type == TokenType.Separator)
+                {
+                    if (!TryChangeState(token, out state, out string error))
+                        throw new Exception(error);
+
                     Lexer.NextToken();
-				}
+                }
 
-				switch (state)
-				{
-					case ParseState.Date:
-						timeDone = true;
-                        dateTime = ParseDateTime(Lexer, Config.InputTimeFormats);
+                switch (state)
+                {
+                    case ParseState.Date:
+                        timeDone = true;
+                        if (!TryParseDateTime(Lexer, Config.InputTimeFormats, out dateTime, out string error))
+                            throw new Exception(error);
+
                         break;
-					case ParseState.Time:
-						timeDone = true;
-                        timeSpan = ParseTimespan(Lexer);
-						break;
-					case ParseState.Channel:
-						channelDone = true;
-                        channels = ParseChannel(Lexer);
-						break;
-					case ParseState.Text:
-						if (timeDone && channelDone)
-							message = ParseText(Lexer);
-						else
-							throw new Exception("Time and Channels must be defined before say");
-						break;
-					default:
-						token = Lexer.NextToken();
-						break;
-				}
+                    case ParseState.Time:
+                        timeDone = true;
+                        if (!TryParseTimespan(Lexer, out timeSpan, out error))
+                            throw new Exception(error);
 
-				// Update token
-				token = Lexer.GetToken();
-			}
+                        break;
+                    case ParseState.Channel:
+                        channelDone = true;
+                        if (!TryParseChannel(Lexer, out channels, out error))
+                            throw new Exception(error);
 
-			return new Notification(author, dateTime + timeSpan, message, channels);
-		}
+                        break;
+                    case ParseState.Text:
+                        if (timeDone && channelDone)
+						{
+                            if (!TryParseText(Lexer, out message))
+                                throw new Exception(message);
+                        }
+                        else
+                            throw new Exception("Time and Channels must be defined before say");
+                        break;
+                }
+
+                // Update token
+                token = Lexer.GetToken();
+            }
+
+            return new NotificationJob(author, (dateTime - DateTime.UtcNow) + timeSpan, message, channels);
+        }
+
+        /// <summary>
+        /// Parse a DateTime from a string.
+        /// </summary>
+        /// <param name="input"></param>
+        /// <returns></returns>
+        public bool TryParse(string[] input, string author, out NotificationJob notification)
+        {
+            notification = null;
+            if (string.IsNullOrEmpty(string.Join(' ', input)))
+                return false;
+
+            Lexer.Lex(input);
+            ParseState state = ParseState.Time;
+
+            bool timeDone = false;
+            bool channelDone = false;
+
+            string message = "";
+            DateTime dateTime = DateTime.UtcNow;
+            TimeSpan timeSpan = new TimeSpan();
+            List<string> channels = new List<string>();
+
+            Token<TokenType> token = Lexer.GetToken();
+            while (token != null)
+            {
+                if (token.Type == TokenType.Separator)
+                {
+                    if (!TryChangeState(token, out state, out _))
+                        return false;
+
+                    Lexer.NextToken();
+                }
+
+                switch (state)
+                {
+                    case ParseState.Date:
+                        timeDone = true;
+                        if (!TryParseDateTime(Lexer, Config.InputTimeFormats, out dateTime, out _))
+                            return false;
+
+                        break;
+                    case ParseState.Time:
+                        timeDone = true;
+                        if (!TryParseTimespan(Lexer, out timeSpan, out _))
+                            return false;
+
+                        break;
+                    case ParseState.Channel:
+                        channelDone = true;
+                        if (!TryParseChannel(Lexer, out channels, out _))
+                            return false;
+
+                        break;
+                    case ParseState.Text:
+                        if (timeDone && channelDone)
+                        {
+                            if (!TryParseText(Lexer, out message))
+                                return false;
+                        }
+                        else
+                            return false;
+
+                        break;
+                }
+
+                // Update token
+                token = Lexer.GetToken();
+            }
+
+            notification = new NotificationJob(author, timeSpan, message, channels);
+            return true;
+        }
 
         /// <summary>
         /// Change the state according to token.
         /// </summary>
         /// <param name="token"></param>
         /// <returns></returns>
-        ParseState ChangeState(Token<TokenType> token)
+        bool TryChangeState(Token<TokenType> token, out ParseState state, out string error)
         {
+            error = "";
             if (token.Type != TokenType.Separator)
-                throw new Exception($"Separator expected got {token.Type}: {token.Value}");
+			{
+                state = default;
+                error = $"Separator expected got {token.Type}: {token.Value}";
+                return false;
+			}
 
             switch (token.Value)
             {
                 case "to":
-                    return ParseState.Channel;
+                    state = ParseState.Channel;
+                    return true;
                 case "on":
-                    return ParseState.Date;
+                    state = ParseState.Date;
+                    return true;
                 case "say":
-                    return ParseState.Text;
+                    state = ParseState.Text;
+                    return true;
                 case "in":
-                    return ParseState.Time;
+                    state = ParseState.Time;
+                    return true;
                 default:
-                    throw new Exception($"Unknown state specifier {token.Value}");
+                    state = default;
+                    error = $"Unknown state specifier {token.Value}";
+                    return false;
             }
         }
 
@@ -121,87 +213,106 @@ namespace NModule.Parser
         /// </summary>
         /// <param name="lexer"></param>
         /// <returns></returns>
-        TimeSpan ParseTimespan(Lexer<TokenType> lexer)
-		{
-			Token<TokenType> token = lexer.GetToken();
-            TimeSpan timeSpan = new TimeSpan();
+        bool TryParseTimespan(Lexer<TokenType> lexer, out TimeSpan timeSpan, out string error)
+        {
+            error = "";
 
+            Token<TokenType> token = lexer.GetToken();
             if (token.Type != TokenType.Number)
-                 throw new Exception($"Number expected got {token.Type}: {token.Value}");
-
-			while (token != null && (token.Type == TokenType.TimeSpecifier || token.Type == TokenType.Number))
 			{
-				if (token.Type == TokenType.Number)
-				{
-					Token<TokenType> timeSpecifier = lexer.NextToken();
+                timeSpan = default;
+                error = $"Number expected got {token.Type}: {token.Value}";
+                return false;
+            }
+
+            timeSpan = new TimeSpan();
+            while (token != null && (token.Type == TokenType.TimeSpecifier || token.Type == TokenType.Number))
+            {
+                if (token.Type == TokenType.Number)
+                {
+                    Token<TokenType> timeSpecifier = lexer.NextToken();
                     if (timeSpecifier.Type != TokenType.TimeSpecifier)
                         throw new Exception($"Timespecifier expected got {token.Type}: {token.Value}");
 
-					if (!int.TryParse(token.Value, out int number))
+                    if (!int.TryParse(token.Value, out int number))
                         throw new Exception($"{token.Value} is not a valid integer");
 
                     if (timeSpecifier.Value == "day" || timeSpecifier.Value == "days" || timeSpecifier.Value == "d")
-						timeSpan += new TimeSpan(number, 0, 0, 0, 0);
+                        timeSpan += new TimeSpan(number, 0, 0, 0, 0);
 
-					if (timeSpecifier.Value == "hour" || timeSpecifier.Value == "hours" || timeSpecifier.Value == "h")
-						timeSpan += new TimeSpan(0, number, 0, 0, 0);
+                    if (timeSpecifier.Value == "hour" || timeSpecifier.Value == "hours" || timeSpecifier.Value == "h")
+                        timeSpan += new TimeSpan(0, number, 0, 0, 0);
 
-					if (timeSpecifier.Value == "minute" || timeSpecifier.Value == "minutes" || timeSpecifier.Value == "m")
-						timeSpan += new TimeSpan(0, 0, number, 0, 0);
+                    if (timeSpecifier.Value == "minute" || timeSpecifier.Value == "minutes" || timeSpecifier.Value == "m")
+                        timeSpan += new TimeSpan(0, 0, number, 0, 0);
 
-					if (timeSpecifier.Value == "second" || timeSpecifier.Value == "seconds" || timeSpecifier.Value == "s")
-						timeSpan += new TimeSpan(0, 0, 0, number, 0);
-				}
+                    if (timeSpecifier.Value == "second" || timeSpecifier.Value == "seconds" || timeSpecifier.Value == "s")
+                        timeSpan += new TimeSpan(0, 0, 0, number, 0);
+                }
 				else
-                    throw new Exception($"Number expected got {token.Type}: {token.Value}");
+				{
+                    error = $"Number expected got {token.Type}: {token.Value}";
+                    timeSpan = default;
+                    return false;
+                }
 
                 token = lexer.NextToken();
-			}
+            }
 
-			return timeSpan;
-		}
+            return true;
+        }
 
         /// <summary>
         /// Parse text for user input
         /// </summary>
         /// <param name="lexer"></param>
         /// <returns></returns>
-		string ParseText(Lexer<TokenType> lexer)
-		{
-			Token<TokenType> token = lexer.GetToken();
-			string message = "";
+		bool TryParseText(Lexer<TokenType> lexer, out string message)
+        {
+            Token<TokenType> token = lexer.GetToken();
+            message = "";
 
-			while (token != null)
-			{
-				message += $" {token.Value}";
+            while (token != null)
+            {
+                message += $" {token.Value}";
 
-				token = lexer.NextToken();
-			}
+                token = lexer.NextToken();
+            }
 
-			return message.Substring(1);
-		}
+            message = message.Substring(1);
+            return true;
+        }
 
         /// <summary>
         /// Get list of all specified channels
         /// </summary>
         /// <param name="lexer"></param>
         /// <returns></returns>
-        List<string> ParseChannel(Lexer<TokenType> lexer)
-		{
-			Token<TokenType> token = lexer.GetToken();
-            List<string> messages = new List<string>();
+        bool TryParseChannel(Lexer<TokenType> lexer, out List<string> channels, out string error)
+        {
+            Token<TokenType> token = lexer.GetToken();
+            channels = new List<string>();
 
-			while (token != null && token.Type != TokenType.Separator)
-			{
+            while (token != null && token.Type != TokenType.Separator)
+            {
                 if (token.Type == TokenType.Selector)
-                    messages.Add(ParseSelector(lexer));
+				{
+                    if (!TryParseSelector(lexer, out string group))
+					{
+                        error = group;
+                        return false;
+					}
+
+                    channels.Add(group);
+                }
                 else if (token.Value != "and")
-                    messages.Add(token.Value);
+                    channels.Add(token.Value);
 
-				token = lexer.NextToken();
-			}
+                token = lexer.NextToken();
+            }
 
-            return messages;
+            error = "";
+            return true;
         }
 
         /// <summary>
@@ -210,7 +321,7 @@ namespace NModule.Parser
         /// <param name="lexer"></param>
         /// <param name="formats"></param>
         /// <returns></returns>
-        DateTime ParseDateTime(Lexer<TokenType> lexer, string[] formats)
+        bool TryParseDateTime(Lexer<TokenType> lexer, string[] formats, out DateTime dateTime, out string error)
         {
             Token<TokenType> token = lexer.GetToken();
             string dateTimeString = "";
@@ -221,7 +332,18 @@ namespace NModule.Parser
                 token = lexer.NextToken();
             }
 
-            return DateTime.ParseExact(dateTimeString.Substring(1), formats, System.Globalization.CultureInfo.InvariantCulture);
+			try
+			{
+                error = "";
+                dateTime = DateTime.ParseExact(dateTimeString.Substring(1), formats, System.Globalization.CultureInfo.InvariantCulture).ToUniversalTime();
+                return true;
+            }
+			catch (Exception e)
+			{
+                error = e.Message;
+                dateTime = default;
+                return false;
+			}
         }
 
         /// <summary>
@@ -229,7 +351,7 @@ namespace NModule.Parser
         /// </summary>
         /// <param name="lexer"></param>
         /// <returns></returns>
-        string ParseSelector(Lexer<TokenType> lexer)
+        bool TryParseSelector(Lexer<TokenType> lexer, out string group)
         {
             Token<TokenType> token = lexer.GetToken();
             string str = token.Value;
@@ -243,10 +365,13 @@ namespace NModule.Parser
             }
 
             if (token.Value != ">")
-                throw new Exception("Expected closing bracket >");
+			{
+                group = "Expected closing bracket >";
+                return false;
+            }
 
-            str += token.Value;
-            return str;
+            group = str + token.Value;
+            return true;
         }
-	}
+    }
 }

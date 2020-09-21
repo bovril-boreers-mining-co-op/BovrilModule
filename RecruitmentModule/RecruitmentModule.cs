@@ -1,22 +1,11 @@
 ﻿using Discord;
-using Discord.Rest;
 using Discord.WebSocket;
-using EveOpenApi;
 using EveOpenApi.Api;
-using EveOpenApi.Api.Configs;
-using EveOpenApi.Authentication;
-using EveOpenApi.Authentication.Interfaces;
-using EveOpenApi.Enums;
-using EveOpenApi.Interfaces;
-using MySql.Data.MySqlClient;
+using Modules.Jobs;
 using Newtonsoft.Json;
-using NModule;
-using Renci.SshNet.Security.Cryptography;
 using System;
 using System.Collections.Generic;
-using System.Data.Common;
 using System.IO;
-using System.IO.Pipes;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -27,120 +16,294 @@ using YahurrFramework;
 using YahurrFramework.Attributes;
 using YahurrFramework.Enums;
 
-namespace RecruitmentModule
+namespace Modules
 {
-	[Config(typeof(RecruitmentConfig))]
-	[RequiredModule(typeof(JobQueueModule))]
+	[Config(typeof(RecruitmentModuleConfig))]
+	[RequiredModule(typeof(LogModule), typeof(RoleModule), typeof(DatabaseModule), typeof(ApiModule), typeof(JobModule))]
 	public class RecruitmentModule : YModule
 	{
-		public new RecruitmentConfig Config
+		public new RecruitmentModuleConfig Config
 		{
 			get
 			{
-				return (RecruitmentConfig)base.Config;
+				return (RecruitmentModuleConfig)base.Config;
 			}
 		}
 
-		private JobQueueModule JobQueueModule { get; set; }
+		private LogModule LogModule { get; set; }
 
-		private IApiConfig ApiConfig { get; } = new ApiConfig()
-		{
-			UserAgent = "Bovril discord authentication;Prople Dudlestreis;henstr@hotmail.com",
-			DefaultUser = "Prople Dudlestreis",
-		};
+		private RoleModule RoleModule { get; set; }
 
-		private IAPI ESI { get; set; }
+		private DatabaseModule DatabaseModule { get; set; }
 
-		IGuild guild;
+		private ApiModule ApiModule { get; set; }
+
+		private JobModule JobModule { get; set; }
+
+		CancellationTokenSource authLoopToken;
 
 		protected override async Task Init()
 		{
-			if (!File.Exists("Files/EveLogin.json"))
-				throw new FileNotFoundException("Eve login file not provided.");
+			await LogAsync(LogLevel.Message, $"Initializing {this.GetType().Name}...");
 
-			await LogAsync(LogLevel.Message, "Starting server...");
-			await Task.Factory.StartNew(
-				SocketServer,
-				CancellationToken.None,
-				TaskCreationOptions.LongRunning,
-				TaskScheduler.Default
-			);
-			await LogAsync(LogLevel.Message, "Done.");
+			authLoopToken = new CancellationTokenSource();
 
-			guild = Guild;
+			LogModule = await GetModuleAsync<LogModule>();
+			RoleModule = await GetModuleAsync<RoleModule>();
+			DatabaseModule = await GetModuleAsync<DatabaseModule>();
+			ApiModule = await GetModuleAsync<ApiModule>();
+			JobModule = await GetModuleAsync<JobModule>();
 
-			IOauthLogin login = await new LoginBuilder().Eve
-				.WithCredentials("6715ab2423344bb396a0629e0703e75c", "http://localhost:8080")
-				.FromFile("Files/CorpMembersToken.txt")
-				.Build();
+			await JobModule.RegisterJobAsync<CheckupJob>(CheckupJobMethod);
 
-			//await login.AddToken((Scope)"esi-corporations.read_corporation_membership.v1");
-			//login.SaveToFile("Files/CorpMembersToken.txt", true);
-
-			IApiConfig apiConfig = new EsiConfig()
+			if (Config.NameVerificationLoop)
 			{
-				UserAgent = "Prople Dudlestreis;henstr@hotmail.com",
-				DefaultUser = "Prople Dudlestreis"
-			};
+				await JobModule.RegisterJobAsync<VerifyJob>(VerifyJobMethod);
+				if (!await JobModule.JobExistsAsync<VerifyJob>(x => x.Creator == "RecruitmentModule"))
+					await JobModule.AddJobAsync(new VerifyJob("RecruitmentModule", new TimeSpan(Config.NameVerificationInterval, 0, 0)), RoundDateTime(DateTime.UtcNow));
+			}
 
-			await LogAsync(LogLevel.Message, "Setting Esi.");
-			ESI = new ApiBuilder(apiConfig, login).Build();
-			await LogAsync(LogLevel.Message, "Done.");
-			JobQueueModule = await GetModuleAsync<JobQueueModule>();
-		}
-
-		protected override async Task Done()
-		{
-			JobQueueModule.RegisterJob<NameCheckerJob>(ProcessJob);
-
-			if (JobQueueModule.GetJob<NameCheckerJob>(_ => true) == null)
-				await JobQueueModule.AddJob(new NameCheckerJob("RecruitmentModule", GetNameJobStart()));
+			await LogAsync(LogLevel.Message, "Starting auth loop...");
+			await StartSocketServer(authLoopToken.Token);
 		}
 
 		protected override async Task UserJoined(SocketGuildUser user)
 		{
-			ITextChannel channel = (ITextChannel)user.Guild.GetChannel(Config.LogChannel);
-			await channel.SendMessageAsync($"{user.Username} has joined the server.");
+			SetContext(new MethodContext(user.Guild, null, null));
+			if (!string.IsNullOrEmpty(Config.WelcomeMessage))
+				await user.SendMessageAsync(Config.WelcomeMessage);
 
-			if (string.IsNullOrEmpty(Config.WelcomeMessage))
-				await user.SendMessageAsync(string.Format(Config.WelcomeMessage, user.Username));
+			await LogModule.LogMessage($"{user.Username} has joined the server.", "recruitment");
 		}
 
-		DateTime GetNameJobStart()
+		protected override Task UserLeft(SocketGuildUser user)
 		{
-			DateTime time = DateTime.Today;
+			SetContext(new MethodContext(user.Guild, null, null));
+			return LogModule.LogMessage($"{user.Username} has left the server.", "recruitment");
+		}
 
-			while (time < DateTime.UtcNow)
-				time += new TimeSpan(Config.NameCheckInterval, 0, 0);
+		#region Commands
 
-			return time;
+		/// <summary>
+		/// Verify recreuitment roles for all users.
+		/// </summary>
+		/// <returns></returns>
+		[Command("namecheck")]
+		public async Task Namecheck()
+		{
+			await RespondAsync("Starting namecheck....", false, false);
+			await VerifyUsers(Guild);
+			await RespondAsync("Done.", false, false);
 		}
 
 		/// <summary>
-		/// Check all names
+		/// Manually auth a user
 		/// </summary>
-		/// <param name="job"></param>
 		/// <returns></returns>
-		async Task ProcessJob(NameCheckerJob job)
+		[Summary("Manually auth a user")]
+		[Command("auth")]
+		public async Task Auth(
+			[Summary("Discord user ID, Enable developer mode and rick click user.")]ulong discordId,
+			[Summary("Eve user ID, Go to thei ZKill page and copy the ID from the URL.")]int eveId)
 		{
-			// Failsafe
-			try
+			IGuildUser user = await Guild.GetUserAsync(discordId);
+			Dictionary<ulong, int> authedUsers = await GetAuthedUsers();
+
+			if (authedUsers.TryGetValue(discordId, out int authedChar))
 			{
-				await VerifyUsers();
-				await StoreAuditLog();
-			}
-			catch (Exception e)
-			{
-				//await LogMessage($"Recruitment loop failed with exception: {e.Message}");
-				await LogAsync(e);
+				await RespondAsync($"User already authed to {authedChar}, if bot does not update roles run !namecheck or !auth loop restart. If that does not work pray Prople is online.", false, false);
+				return;
 			}
 
-			// Requeue the command to ensure loop.
-			await JobQueueModule.AddJob(new NameCheckerJob("RecruitmentModule", GetNameJobStart()));
+			string name = string.IsNullOrEmpty(user.Nickname) ? user.Username : user.Nickname;
+			await RespondAsync($"Authenticating {name}...", false, false);
+			await DatabaseModule.RunQueryAsync(Config.RecruitmentDatabase, $"INSERT INTO users VALUES ({eveId},{discordId})");
+			await RespondAsync("Done, run !namecheck to update roles.", false, false);
 		}
 
-		async Task SocketServer()
+		/// <summary>
+		/// Manually verify a user
+		/// </summary>
+		/// <returns></returns>
+		[Summary("Manually verify a user")]
+		[Command("verify")]
+		public async Task Verify(
+			[Summary("Discord user ID, Enable developer mode and rick click user.")] ulong discordId)
 		{
+			IGuildUser user = await Guild.GetUserAsync(discordId);
+
+			await RespondAsync("Starting user verification....", false, false);
+			await VerifyUser(Guild, user);
+			await RespondAsync("Done.", false, false);
+		}
+
+		/// <summary>
+		/// Check if a character is authed
+		/// </summary>
+		/// <param name="discordId"></param>
+		/// <returns></returns>
+		[Summary("Check if a user is registerd in our DB.")]
+		[Command("authed")]
+		public async Task IsAuthed(
+			[Summary("Discord user ID, Enable developer mode and rick click user.")] ulong discordId)
+		{
+			IGuildUser user = await Guild.GetUserAsync(discordId);
+			Dictionary<ulong, int> authedUsers = await GetAuthedUsers();
+			bool userAuthed = authedUsers.TryGetValue(discordId, out _);
+
+			string name = string.IsNullOrEmpty(user.Nickname) ? user.Username : user.Nickname;
+			await RespondAsync($"{name} is {(userAuthed ? "" : "not ")}authed.", false, false);
+		}
+
+		/// <summary>
+		/// See who owns a character and all his alts.
+		/// </summary>
+		/// <param name="user"></param>
+		/// <returns></returns>
+		[Summary("See who owns a character and all his alts.")]
+		[Command("main")]
+		public async Task MainCheck(params string[] user)
+		{
+			IGuildUser guildUser = GetUser(string.Join(' ', user), true);
+			Dictionary<ulong, int> authedUsers = await GetAuthedUsers();
+			
+			if (!authedUsers.TryGetValue(guildUser.Id, out int eveID))
+			{
+				await RespondAsync($"{guildUser} is not authed", false, false);
+				return;
+			}
+
+			IApiResponse<SeatData<SeatUser>> seatUser = await ApiModule.Seat.Path("/users/{user_id}").Get<SeatData<SeatUser>>(("user_id", eveID));
+			IApiResponse<SeatData<SeatGroup>> seatGroup = await ApiModule.Seat.Path("/users/groups/{group_id}").Get<SeatData<SeatGroup>>(("group_id", seatUser.FirstPage.Data.GroupID));
+
+			StringBuilder reply = new StringBuilder();
+			SeatGroupUser main = seatGroup.FirstPage.Data.Users.Single(x => x.CharacterID == long.Parse(seatGroup.FirstPage.Data.MainCharacter));
+			reply.Append($"{main.Name}:\n");
+
+			foreach (SeatGroupUser groupUser in seatGroup.FirstPage.Data.Users)
+			{
+				if (groupUser.CharacterID == main.CharacterID)
+					continue;
+
+				reply.Append($"	{groupUser.Name}\n");
+			}
+
+			await RespondAsync($"```{reply}```", false, false);
+		}
+
+		/// <summary>
+		/// Restart the auth loop.
+		/// </summary>
+		/// <returns></returns>
+		[Summary("Restart the auth loop.")]
+		[Command("auth", "loop", "restart")]
+		public async Task AuthLoopRestart()
+		{
+			await RespondAsync("Restarting auth loop...", false, false);
+			authLoopToken.Cancel();
+
+			authLoopToken = new CancellationTokenSource();
+			await StartSocketServer(authLoopToken.Token);
+			await RespondAsync("Done.", false, false);
+		}
+
+		/// <summary>
+		/// Get how many days the character has been in corp.
+		/// </summary>
+		/// <param name="user"></param>
+		/// <returns></returns>
+		[Summary("Get how mant days a character has been in corp.")]
+		[Command("days")]
+		public async Task GetDaysInCorp(params string[] user)
+		{
+			IGuildUser guildUser = GetUser(string.Join(' ', user), true);
+			Dictionary<ulong, int> authedUsers = await GetAuthedUsers();
+
+			if (!authedUsers.TryGetValue(guildUser.Id, out int eveID))
+			{
+				await RespondAsync($"{guildUser} is not authed", false, false);
+				return;
+			}
+
+			await RespondAsync($"{await GetDaysInCorp(eveID)}", false, false);
+		}
+
+		/// <summary>
+		/// Check if the bot can find a user in current guild.
+		/// </summary>
+		/// <param name="discordId"></param>
+		/// <returns></returns>
+		[Summary("Check if the bot can find a user in current guild.")]
+		[Command("find", "user")]
+		public async Task FindUser(ulong discordId)
+		{
+			foreach (IGuildUser user in await Guild.GetUsersAsync())
+			{
+				if (user.Id == discordId)
+				{
+					await RespondAsync("User found in server.", false, false);
+					return;
+				}
+			}
+
+			await RespondAsync("User not found in server.", false, false);
+		}
+
+		/// <summary>
+		/// Export discord users as TSV
+		/// </summary>
+		/// <returns></returns>
+		[Command("export", "users")]
+		public async Task ExportUsers()
+		{
+			if (Guild == null)
+				return;
+
+			StringBuilder reply = new StringBuilder("Name\n");
+			IReadOnlyCollection<IUser> users = await Guild.GetUsersAsync();
+			foreach (IUser user in users)
+			{
+				SocketGuildUser guildUser = user as SocketGuildUser;
+
+				if (guildUser == null)
+					continue;
+
+				reply.Append($"{(string.IsNullOrEmpty(guildUser.Nickname) ? guildUser.Username : guildUser.Nickname)}\n");
+			}
+
+			using (StreamWriter writer = File.CreateText("Files/Users.tsv"))
+			{
+				await writer.WriteAsync(reply);
+			}
+
+			await Channel.SendFileAsync("Files/Users.tsv");
+			File.Delete("Files/Users.tsv");
+		}
+
+		#endregion
+
+		/// <summary>
+		/// Start the authentication loop that communitcated with the auth website.
+		/// </summary>
+		/// <param name="token"></param>
+		/// <returns></returns>
+		Task<Task> StartSocketServer(CancellationToken token)
+		{
+			return Task.Factory.StartNew(
+				() => SocketServer(Guild),
+				token,
+				TaskCreationOptions.LongRunning,
+				TaskScheduler.Default
+			);
+		}
+
+		/// <summary>
+		/// Loop for receiving commands from the bovril auth website.
+		/// </summary>
+		/// <returns></returns>
+		async Task SocketServer(IGuild guild)
+		{
+			// Website is hosted on he same network.
 			IPAddress ipAdress = IPAddress.Parse("127.0.0.1");
 			IPEndPoint localEndPoint = new IPEndPoint(ipAdress, 55766);
 
@@ -152,12 +315,18 @@ namespace RecruitmentModule
 			while (true)
 			{
 				Socket socket = await listener.AcceptAsync();
-				string response = await ReveiceMessage(socket);
+				string command = await ReveiceMessage(socket);
 
-				await ProcessRequest(response);
+				await LogModule.LogMessage($"Received command '{command}' from auth server.", "debug");
+				await ProcessRequest(command, guild);
 			}
 		}
 
+		/// <summary>
+		/// Get message sent over socket and convert it to a UTF-8 string.
+		/// </summary>
+		/// <param name="socket"></param>
+		/// <returns></returns>
 		async Task<string> ReveiceMessage(Socket socket)
 		{
 			using (NetworkStream stream = new NetworkStream(socket))
@@ -167,113 +336,74 @@ namespace RecruitmentModule
 			}
 		}
 
-		[IgnoreHelp]
-		[Command("namecheck")]
-		public async Task NameCheck()
+		/// <summary>
+		/// Potential for more commands later down the line.
+		/// </summary>
+		/// <param name="content"></param>
+		/// <returns></returns>
+		async Task ProcessRequest(string content, IGuild guild)
 		{
-			await RespondAsync("Starting user verification process please wait.", false, false);
-			await VerifyUsers();
-			await RespondAsync("User verification process complete.", false, false);
-		}
-
-		[IgnoreHelp]
-		[Command("audit", "store")]
-		public async Task TestCommand()
-		{
-			await RespondAsync("Storing audit log.", false, false);
-			await StoreAuditLog();
-			await RespondAsync("Done.", false, false);
-		}
-
-		[IgnoreHelp]
-		[Command("pipecheck")]
-		public async Task PipeCheck()
-		{
-			IPEndPoint localEndPoint = new IPEndPoint(IPAddress.Loopback, 55766);
-
-			Socket client = new Socket(IPAddress.Loopback.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-
-			await client.ConnectAsync(localEndPoint);
-
-			Memory<byte> data = Encoding.ASCII.GetBytes("namecheck");
-
-			await client.SendAsync(data, SocketFlags.None);
-			client.Shutdown(SocketShutdown.Both);
-			client.Close();
-		}
-
-		[IgnoreHelp]
-		[Command("listusers")]
-		public async Task ListUsers()
-		{
-			Console.WriteLine("1");
-			Console.WriteLine($"{(await Guild.GetUsersAsync()).Count}");
-			Console.WriteLine("Hi?");
-			foreach (var item in await Guild.GetUsersAsync())
+			content = content.ToLower();
+			switch (content)
 			{
-				if (item.Nickname == "Prople Dudlestreis")
-					Console.WriteLine(item.Username);
-
-				//Console.WriteLine(item.Username);
+				case "namecheck":
+					await VerifyUsers(guild);
+					break;
+				default:
+					break;
 			}
-			Console.WriteLine("Done");
 		}
 
 		/// <summary>
 		/// Verify user roles
 		/// </summary>
 		/// <returns></returns>
-		async Task VerifyUsers()
+		async Task VerifyUsers(IGuild guild)
 		{
-			//await LogMessage("Starting name update...");
-			IApiPath corpPath = ESI.Path("/corporations/{corporation_id}/members/");
-			if (corpPath is ApiError)
-				return;
+			IRole authedRole = guild.GetRole(Config.AuthedRole);
 
-			IApiResponse corpUsersResponse = await corpPath.Get(("corporation_id", 98270640));
-			List<string> corpUsers = corpUsersResponse.ToType<List<string>>().FirstPage;
-
-			Dictionary<ulong, ulong> dbUsers = await GetAuthedUsers();
+			Dictionary<ulong, int> dbUsers = await GetAuthedUsers();
 			foreach (IGuildUser user in await guild.GetUsersAsync())
 			{
-				bool userAuthed = dbUsers.TryGetValue(user.Id, out ulong eveId);
+				bool userAuthed = dbUsers.TryGetValue(user.Id, out int eveId);
+				bool hasRole = await RoleModule.HasRoleAsync(user, authedRole.Name);
+
+				await UpdateRole(user, authedRole, userAuthed, hasRole);
+
 				if (userAuthed)
 				{
 					await VerifyName(user, eveId);
+
 					await VerifyAlliance(user, guild.GetRole(Config.AllianceRole), eveId);
+					await VerifyCorp(user, guild.GetRole(Config.CorpRole), guild.GetRole(Config.LegacyRole), eveId);
 				}
-
-				//await LogAsync(LogLevel.Message, $"{(string.IsNullOrEmpty(user.Nickname) ? user.Username : user.Nickname)}: Authed, {userAuthed} EveId, {eveId}");
-				await VerifyRole(user, guild.GetRole(Config.AuthedRole), userAuthed);
-
-				// Check if user has correct corp roles.
-				bool corpStatus = corpUsers.Contains(eveId.ToString());
-
-				// Manual overide for tablot our beloved CEO
-				if (user.Id == 164887181607960576)
-					corpStatus = true;
-
-				await VerifyRole(user, guild.GetRole(Config.CorpRole), corpStatus);
 			}
+
+			await RoleModule.VerifyRoles();
 		}
 
-		async Task VerifyAlliance(IGuildUser user, IRole allianceRole, ulong eveId)
+		/// <summary>
+		/// Verify a specific user.
+		/// </summary>
+		/// <param name="guild"></param>
+		/// <param name="user"></param>
+		/// <returns></returns>
+		async Task VerifyUser(IGuild guild, IGuildUser user)
 		{
-			IApiResponse characterInfo = await ESI.Path("/characters/{character_id}/").Get(("character_id", eveId));
-			string corpID = JsonConvert.DeserializeObject<dynamic>(characterInfo.FirstPage)["corporation_id"];
+			IRole authedRole = guild.GetRole(Config.AuthedRole);
+			Dictionary<ulong, int> dbUsers = await GetAuthedUsers();
 
-			IApiResponse allianceCorpsResponse = await ESI.Path("/alliances/{alliance_id}/corporations/").Get(("alliance_id", 1354830081));
-			List<string> allianceCorps = allianceCorpsResponse.ToType<List<string>>().FirstPage;
+			bool userAuthed = dbUsers.TryGetValue(user.Id, out int eveId);
+			bool hasRole = await RoleModule.HasRoleAsync(user, authedRole.Name);
 
-			await VerifyRole(user, allianceRole, allianceCorps.Contains(corpID));
-		}
+			await UpdateRole(user, authedRole, userAuthed, hasRole);
 
-		async Task StoreAuditLog()
-		{
-			IEnumerable<IAuditLogEntry> auditLog = await guild.GetAuditLogsAsync();
-			foreach (IAuditLogEntry entry in auditLog)
+			if (userAuthed)
 			{
-				await StoreAuditEntry(entry);
+				await VerifyName(user, eveId);
+
+				await VerifyAlliance(user, guild.GetRole(Config.AllianceRole), eveId);
+				await VerifyCorp(user, guild.GetRole(Config.CorpRole), guild.GetRole(Config.LegacyRole), eveId);
 			}
 		}
 
@@ -281,48 +411,14 @@ namespace RecruitmentModule
 		/// Retrive all eve id's from the database.
 		/// </summary>
 		/// <returns></returns>
-		async Task<Dictionary<ulong, ulong>> GetAuthedUsers()
+		async Task<Dictionary<ulong, int>> GetAuthedUsers()
 		{
-			Dictionary<ulong, ulong> dbUser = new Dictionary<ulong, ulong>();
-			using (MySqlConnection conn = new MySqlConnection(Config.ConnectionString))
-			{
-				conn.Open();
-
-				MySqlCommand cmd = new MySqlCommand("select * from users;", conn);
-				DbDataReader reader = await cmd.ExecuteReaderAsync();
-
-				while (await reader.ReadAsync())
-				{
-					ulong eveID = ulong.Parse(reader["eve_id"].ToString());
-					ulong discordID = ulong.Parse(reader["discord_id"].ToString());
-
-					dbUser.Add(discordID, eveID);
-				}
-
-				if (!reader.IsClosed)
-					reader.Close();
-			}
+			Dictionary<ulong, int> dbUser = new Dictionary<ulong, int>();
+			List<DatabaseRow> rows = await DatabaseModule.RunQueryAsync(Config.RecruitmentDatabase, "select * from users;");
+			foreach (DatabaseRow row in rows)
+				dbUser.Add((ulong)row.GetData<long>(1), row.GetData<int>(0));
 
 			return dbUser;
-		}
-
-		async Task StoreAuditEntry(IAuditLogEntry entry)
-		{
-			using (MySqlConnection conn = new MySqlConnection(Config.AuditConnectionString))
-			{
-				conn.Open();
-
-				MySqlCommand exists = new MySqlCommand($"select exists(select * from discord where id = {entry.Id});", conn);
-				object entryExists = await exists.ExecuteScalarAsync();
-
-				if ((long)entryExists != 1)
-				{
-					object data = GetAuditData(entry.Data);
-					string query = @$"insert into discord values ({entry.Id},{entry.User.Id},'{entry.CreatedAt.ToString("yyyy-MM-dd hh:mm:ss")}',{(int)entry.Action},'{entry.Reason}','{data}');";
-					MySqlCommand cmd = new MySqlCommand(query, conn); //I really hope alice wont try to do an sql injection
-					await cmd.ExecuteNonQueryAsync();
-				}
-			}
 		}
 
 		/// <summary>
@@ -331,109 +427,150 @@ namespace RecruitmentModule
 		/// <param name="user"></param>
 		/// <param name="eveId"></param>
 		/// <returns></returns>
-		async Task VerifyName(IGuildUser user, ulong eveId)
+		async Task VerifyName(IGuildUser user, int eveId)
 		{
-			IApiResponse response = await ESI.Path("/characters/{character_id}/").Get(("character_id", eveId));
+			IApiResponse response = await ApiModule.Esi.Path("/characters/{character_id}/").Get(("character_id", eveId));
 
 			if (response is ApiError)
 				return;
 
-			IApiResponse<dynamic> casted = response.ToType<dynamic>();
+			dynamic casted = JsonConvert.DeserializeObject<dynamic>(response.FirstPage);
 
 			string userName = string.IsNullOrEmpty(user.Nickname) ? user.Username : user.Nickname;
-			string eveName = casted.FirstPage["name"].Value.ToString();
+			string eveName = casted["name"].Value.ToString();
 
 			if (userName != eveName)
 			{
 				await user.ModifyAsync(x => x.Nickname = eveName);
-
-				ITextChannel channel = (ITextChannel)await Guild.GetChannelAsync(Config.LogChannel);
-				await channel.SendMessageAsync($"Updated nickname for {userName} to {eveName}");
-			}
-		}
-
-		async Task VerifyRole(IGuildUser user, IRole role, bool state)
-		{
-			bool hasRole = user.RoleIds.Any(a => a == role.Id);
-
-			if (state && !hasRole)
-				await AddRole(user, role);
-			else if (!state && hasRole)
-				await RemoveRole(user, role);
-		}
-
-		async Task RemoveRole(IGuildUser user, IRole role)
-		{
-			await user.RemoveRoleAsync(role);
-
-			string userName = string.IsNullOrEmpty(user.Nickname) ? user.Username : user.Nickname;
-			await LogMessage($"{userName} has been removed from the following roles: {role.Name}");
-		}
-
-		async Task AddRole(IGuildUser user, IRole role)
-		{
-			await user.AddRoleAsync(role);
-
-			string userName = string.IsNullOrEmpty(user.Nickname) ? user.Username : user.Nickname;
-			await LogMessage($"{userName} has been added to the role {role.Name}");
-		}
-
-		async Task LogMessage(string message)
-		{
-			ITextChannel channel = (ITextChannel)await guild.GetChannelAsync(Config.LogChannel);
-			await channel.SendMessageAsync(message);
-		}
-
-		async Task ProcessRequest(string content)
-		{
-			content = content.ToLower();
-			switch (content)
-			{
-				case "namecheck":
-					await VerifyUsers();
-					break;
-				default:
-					break;
+				await LogModule.LogMessage($"Updated nickname for {userName} to {eveName}", Config.LogChannel);
 			}
 		}
 
 		/// <summary>
-		/// Convert to switch when C# 8.0 is out
+		/// Verify user alliance role.
 		/// </summary>
-		/// <param name="data"></param>
+		/// <param name="user"></param>
+		/// <param name="allianceRole"></param>
+		/// <param name="eveId"></param>
 		/// <returns></returns>
-		object GetAuditData(IAuditLogData data)
+		async Task VerifyAlliance(IGuildUser user, IRole allianceRole, int eveId)
 		{
-			if (data.GetType() == typeof(BanAuditLogData))
-				return (data as BanAuditLogData).Target.Id;
-			if (data.GetType() == typeof(ChannelCreateAuditLogData))
-				return (data as ChannelCreateAuditLogData).ChannelId;
-			if (data.GetType() == typeof(ChannelDeleteAuditLogData))
-				return (data as ChannelDeleteAuditLogData).ChannelId;
-			if (data.GetType() == typeof(ChannelUpdateAuditLogData))
-				return (data as ChannelUpdateAuditLogData).ChannelId;
-			if (data.GetType() == typeof(EmoteCreateAuditLogData))
-				return (data as EmoteCreateAuditLogData).EmoteId;
-			if (data.GetType() == typeof(EmoteDeleteAuditLogData))
-				return (data as EmoteDeleteAuditLogData).EmoteId;
-			if (data.GetType() == typeof(KickAuditLogData))
-				return (data as KickAuditLogData).Target.Id;
-			if (data.GetType() == typeof(MemberRoleAuditLogData))
-				return (data as MemberRoleAuditLogData).Target.Id;
-			if (data.GetType() == typeof(MemberUpdateAuditLogData))
-				return (data as MemberUpdateAuditLogData).Target.Id;
-			if (data.GetType() == typeof(PruneAuditLogData))
-				return (data as PruneAuditLogData).MembersRemoved;
-			if (data.GetType() == typeof(RoleCreateAuditLogData))
-				return (data as RoleCreateAuditLogData).RoleId;
-			if (data.GetType() == typeof(RoleDeleteAuditLogData))
-				return (data as RoleDeleteAuditLogData).RoleId;
-			if (data.GetType() == typeof(RoleUpdateAuditLogData))
-				return (data as RoleUpdateAuditLogData).RoleId;
-			if (data.GetType() == typeof(UnbanAuditLogData))
-				return (data as UnbanAuditLogData).Target.Id;
+			IApiResponse characterInfo = await ApiModule.Esi.Path("/characters/{character_id}/").Get(("character_id", eveId));
+			int corpID = JsonConvert.DeserializeObject<dynamic>(characterInfo.FirstPage)["corporation_id"];
 
-			return null;
+			IApiResponse allianceCorpsResponse = await ApiModule.Esi.Path("/alliances/{alliance_id}/corporations/").Get(("alliance_id", Config.AllianceID));
+			List<int> allianceCorps = allianceCorpsResponse.ToType<List<int>>().FirstPage;
+
+			bool inAlliance = allianceCorps.Contains(corpID);
+			bool hasRole = await RoleModule.HasRoleAsync(user, allianceRole.Name);
+
+			await UpdateRole(user, allianceRole, inAlliance, hasRole);
+		}
+
+		/// <summary>
+		/// Verify user corp role.
+		/// </summary>
+		/// <param name="user"></param>
+		/// <param name="corpRole"></param>
+		/// <param name="eveId"></param>
+		/// <returns></returns>
+		async Task VerifyCorp(IGuildUser user, IRole corpRole, IRole legacyRole, int eveId)
+		{
+			IApiResponse corpusersReponse = await ApiModule.Esi.Path("/corporations/{corporation_id}/members/").Get(("corporation_id", Config.CorporationID));
+			List<int> corpUsers = corpusersReponse.ToType<List<int>>().FirstPage;
+
+			bool inCorp = corpUsers.Contains(eveId);
+			bool hasCorpRole = await RoleModule.HasRoleAsync(user, corpRole.Name);
+			bool hasLegacyRole = await RoleModule.HasRoleAsync(user, legacyRole.Name);
+
+			await UpdateRole(user, corpRole, inCorp, hasCorpRole);
+
+			// Give char legacy role if he has been in corp for six months
+			if (!inCorp && hasCorpRole)
+			{
+				int days = await GetDaysInCorp(eveId);
+
+				if (days >= 30 * 6)// Min of six months in corp.
+				{
+					await LogModule.LogMessage($"{user.Nickname} has been in corp for {days} days and has been moved to #Legacy.", Config.LogChannel);
+					await UpdateRole(user, legacyRole, true, hasLegacyRole);
+				}
+			}
+
+			if (inCorp && !hasCorpRole)
+			{
+				string name = (Message.Author as IGuildUser).Nickname ?? Message.Author.Username;
+
+				if (!await JobModule.JobExistsAsync<CheckupJob>(x => x.Character == name))
+					await JobModule.AddJobAsync(new CheckupJob("RecruitmentModule", name));
+			}
+		}
+
+		/// <summary>
+		/// Update a role to its appropriate status. Only modify the role if it needs a change.
+		/// </summary>
+		/// <param name="user"></param>
+		/// <param name="role"></param>
+		/// <param name="shouldHave"></param>
+		/// <param name="have"></param>
+		/// <returns></returns>
+		Task UpdateRole(IGuildUser user, IRole role, bool shouldHave, bool have)
+		{
+			if (shouldHave && !have)
+				return RoleModule.ModifyRoleAsync(user, RoleAction.Add, role.Name);
+			else if (!shouldHave && have)
+				return RoleModule.ModifyRoleAsync(user, RoleAction.Remove, role.Name);
+
+			return Task.CompletedTask;
+		}
+
+		/// <summary>
+		/// Get character days in corp.
+		/// </summary>
+		/// <param name="eveId"></param>
+		/// <returns></returns>
+		async Task<int> GetDaysInCorp(int eveId)
+		{
+			IApiResponse<List<EsiCharacterCorporationHistory>> corpHistoryResponse = await ApiModule.Esi.Path("/characters/{character_id}/corporationhistory/").Get<List<EsiCharacterCorporationHistory>>(("character_id", eveId));
+			List<EsiCharacterCorporationHistory> corpHistory = corpHistoryResponse.FirstPage;
+
+			if (corpHistory[0].CorporationID != Config.CorporationID)
+				return 0;
+
+			return (DateTime.UtcNow - corpHistory[0].Date).Days;
+		}
+
+		/// <summary>
+		/// Round date time to neares hour, 1 = up 0 = down
+		/// </summary>
+		/// <param name="dt"></param>
+		/// <param name="dir"></param>
+		/// <returns></returns>
+		DateTime RoundDateTime(DateTime dt)
+		{
+			return dt.AddSeconds(-dt.Second).AddMinutes(60 - dt.Minute).AddHours(-Config.NameVerificationInterval);
+		}
+
+		/// <summary>
+		/// Method to inform recruites when there is time for a checkup.
+		/// </summary>
+		/// <param name="job"></param>
+		/// <param name="context"></param>
+		/// <returns></returns>
+		Task CheckupJobMethod(CheckupJob job, MethodContext context)
+		{
+			return LogModule.LogMessage($"{job.Character} has been in corp for 30 days. Time for a checkup.", Config.CheckupLogChannel);
+		}
+
+		/// <summary>
+		/// Method for running the VerifyUsers method.
+		/// </summary>
+		/// <param name="job"></param>
+		/// <param name="context"></param>
+		/// <returns></returns>
+		Task VerifyJobMethod(VerifyJob job, MethodContext context)
+		{
+			return VerifyUsers(context.Guild);
 		}
 	}
 }

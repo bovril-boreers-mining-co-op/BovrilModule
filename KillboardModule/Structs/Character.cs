@@ -1,19 +1,19 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json.Serialization;
 
-namespace KillboardModule
+namespace Modules
 {
-	internal class Character
+	public struct Character
 	{
-		[JsonProperty("alliance_id")]
-		public ulong AllianceID { get; private set; }
+		[JsonPropertyName("alliance_id")]
+		public ulong AllianceID { get; set; }
 
-		[JsonProperty("character_id")]
-		public ulong CharacterID { get; private set; }
+		[JsonPropertyName("character_id")]
+		public ulong CharacterID { get; set; }
 
-		[JsonProperty("corporation_id")]
-		public ulong CorporationID { get; private set; }
+		[JsonPropertyName("corporation_id")]
+		public ulong CorporationID { get; set; }
 
-		[JsonProperty("ship_type_id")]
-		public int ShipType { get; private set; }
+		[JsonPropertyName("ship_type_id")]
+		public int ShipType { get; set; }
 	}
 }

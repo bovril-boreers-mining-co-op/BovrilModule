@@ -2,14 +2,14 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace NModule.Parser
+namespace Modules.NotificationParser
 {
 	enum TokenType
 	{
 		Number,
 		Text,
 		Separator,
-        Selector,
+		Selector,
 
 		TimeSpecifier,
 		DateSpecifier,

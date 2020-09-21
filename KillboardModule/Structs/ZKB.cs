@@ -1,37 +1,37 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json.Serialization;
 
-namespace KillboardModule
+namespace Modules
 {
-	internal class ZKB
+	public struct ZKB
 	{
-		[JsonProperty("locationID")]
-		public ulong Location { get; private set; }
+		[JsonPropertyName("locationID")]
+		public ulong Location { get; set; }
 
-		[JsonProperty("hash")]
-		public string Hash { get; private set; }
+		[JsonPropertyName("hash")]
+		public string Hash { get; set; }
 
-		[JsonProperty("fittedValue")]
-		public float FittedValue { get; private set; }
+		[JsonPropertyName("fittedValue")]
+		public float FittedValue { get; set; }
 
-		[JsonProperty("totalValue")]
-		public float TotalValue { get; private set; }
+		[JsonPropertyName("totalValue")]
+		public float TotalValue { get; set; }
 
-		[JsonProperty("points")]
-		public int Points { get; private set; }
+		[JsonPropertyName("points")]
+		public int Points { get; set; }
 
-		[JsonProperty("npc")]
-		public bool Npc { get; private set; }
+		[JsonPropertyName("npc")]
+		public bool Npc { get; set; }
 
-		[JsonProperty("solo")]
-		public bool Solo { get; private set; }
+		[JsonPropertyName("solo")]
+		public bool Solo { get; set; }
 
-		[JsonProperty("awox")]
-		public bool Awox { get; private set; }
+		[JsonPropertyName("awox")]
+		public bool Awox { get; set; }
 
-		[JsonProperty("esi")]
-		public string Esi { get; private set; }
+		[JsonPropertyName("esi")]
+		public string Esi { get; set; }
 
-		[JsonProperty("url")]
-		public string Url { get; private set; }
+		[JsonPropertyName("url")]
+		public string Url { get; set; }
 	}
 }
